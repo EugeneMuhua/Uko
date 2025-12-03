@@ -1,0 +1,7 @@
+{
+  "name": "Uko? - Nightlife Radar",
+  "description": "A hyper-local social app to find parties, connect with squads, and rate the vibe. Dark mode aesthetic.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
