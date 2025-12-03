@@ -1,16 +1,37 @@
 
 import React, { useState, useEffect } from 'react';
-import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation } from 'lucide-react';
+import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones } from 'lucide-react';
 import { RadarView } from './components/RadarView';
 import { ChatInterface } from './components/ChatInterface';
 import { NotificationSystem } from './components/NotificationSystem';
+import { Onboarding } from './components/Onboarding';
 import { generatePartyHype } from './services/geminiService';
 import { 
   MOCK_USERS, MOCK_PARTIES, CURRENT_USER_ID 
 } from './constants';
 import { User, Party, Message, Tab, UserStatus, VibeType, AppNotification, NotificationType } from './types';
 
+const USER_STORAGE_KEY = 'uko_user_profile';
+
+interface UserProfile {
+  name: string;
+  avatar: string;
+}
+
+const PIN_ICONS = [
+  { id: 'pin', label: 'Default', Icon: MapPin },
+  { id: 'music', label: 'Music', Icon: Music },
+  { id: 'drink', label: 'Drinks', Icon: Martini },
+  { id: 'game', label: 'Games', Icon: Gamepad2 },
+  { id: 'fire', label: 'Lit', Icon: Flame },
+  { id: 'zap', label: 'Hype', Icon: Zap },
+  { id: 'headphones', label: 'Silent', Icon: Headphones },
+];
+
 const App: React.FC = () => {
+  // --- Auth/User State ---
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+
   // --- Global State ---
   const [activeTab, setActiveTab] = useState<Tab>('radar');
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
@@ -18,6 +39,10 @@ const App: React.FC = () => {
   const [myStatus, setMyStatus] = useState<UserStatus>(UserStatus.READY);
   const [radarRadius, setRadarRadius] = useState(5); // km
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+
+  // --- Invite Handling State ---
+  const [pendingPartyId, setPendingPartyId] = useState<string | null>(null);
+  const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
 
   // --- Active Chat State ---
   const [activePartyId, setActivePartyId] = useState<string | null>(null);
@@ -30,7 +55,82 @@ const App: React.FC = () => {
   const [newPartyTitle, setNewPartyTitle] = useState('');
   const [newPartyVibe, setNewPartyVibe] = useState<VibeType>(VibeType.CHILL);
   const [newPartyDesc, setNewPartyDesc] = useState('');
+  const [newPartyIcon, setNewPartyIcon] = useState('pin');
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+
+  // --- Initialization Effects ---
+  
+  useEffect(() => {
+    // 1. Check Local Storage for Auth
+    const savedUser = localStorage.getItem(USER_STORAGE_KEY);
+    if (savedUser) {
+      setUserProfile(JSON.parse(savedUser));
+    }
+
+    // 2. Parse URL for Invites
+    const params = new URLSearchParams(window.location.search);
+    const partyIdParam = params.get('partyId');
+    const invitedByParam = params.get('invitedBy');
+
+    if (partyIdParam) setPendingPartyId(partyIdParam);
+    if (invitedByParam) setInvitingUserId(invitedByParam);
+
+    // Clean URL to prevent re-triggering on refresh
+    if (partyIdParam || invitedByParam) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  // --- Process Invite Once Logged In ---
+  useEffect(() => {
+    if (userProfile && (pendingPartyId || invitingUserId)) {
+        handleProcessInvite();
+    }
+  }, [userProfile, pendingPartyId, invitingUserId]);
+
+  const handleProcessInvite = () => {
+    if (pendingPartyId) {
+        let targetParty = parties.find(p => p.id === pendingPartyId);
+        
+        // If party doesn't exist in our mock data (simulating a fresh fetch)
+        if (!targetParty) {
+            targetParty = {
+                id: pendingPartyId,
+                hostId: invitingUserId || 'unknown',
+                title: 'Invited Party',
+                description: 'You were invited to this event via link.',
+                vibe: VibeType.RAGER,
+                startTime: 'Now',
+                capacity: 50,
+                attendees: 1, // You are the first visible
+                location: { x: 5, y: 5 },
+                distance: 0.1,
+                coverImage: 'https://picsum.photos/400/200?random=invite',
+                icon: 'zap'
+            };
+            setParties(prev => [targetParty!, ...prev]);
+        }
+
+        setActivePartyId(pendingPartyId);
+        setActiveTab('chat');
+        addNotification('Squad Invite Accepted', `Welcome to ${targetParty.title}!`, 'success');
+        setPendingPartyId(null); // Clear pending
+    } else if (invitingUserId) {
+        // Generic app invite
+        addNotification('Friend Connected', `You joined via an invite from ${invitingUserId === 'me' ? 'a friend' : invitingUserId}.`, 'info');
+        setInvitingUserId(null); // Clear pending
+    }
+  };
+
+  const handleOnboardingComplete = (name: string, avatar: string) => {
+    const profile = { name, avatar };
+    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(profile));
+    setUserProfile(profile);
+    // Notification logic handled in useEffect now
+    if (!pendingPartyId && !invitingUserId) {
+        addNotification('Welcome to Uko?', `You're on the radar, ${name}! 📡`, 'success');
+    }
+  };
 
   // --- Notification Logic ---
   const addNotification = (title: string, message: string, type: NotificationType) => {
@@ -50,14 +150,16 @@ const App: React.FC = () => {
 
   // --- Simulations ---
   useEffect(() => {
-    // Simulate a friend changing status after 5 seconds
+    if (!userProfile) return;
+
+    // Simulate a friend changing status after 15 seconds
     const statusTimer = setTimeout(() => {
       addNotification('Squad Update', 'Kofi is now Ready to Party! 🟢', 'info');
       // Update local user state to match
       setUsers(prev => prev.map(u => u.name === 'Kofi' ? {...u, status: UserStatus.READY} : u));
-    }, 8000);
+    }, 15000);
 
-    // Simulate a new party appearing nearby after 15 seconds
+    // Simulate a new party appearing nearby after 25 seconds
     const partyTimer = setTimeout(() => {
       addNotification('New Drop Detected 📍', "Secret Beach Bonfire (1.5km)", 'party');
       const newSimParty: Party = {
@@ -71,13 +173,14 @@ const App: React.FC = () => {
         attendees: 5,
         location: { x: 35, y: -40 },
         distance: 1.5,
-        coverImage: 'https://picsum.photos/400/200?random=99'
+        coverImage: 'https://picsum.photos/400/200?random=99',
+        icon: 'fire'
       };
       setParties(prev => [...prev, newSimParty]);
-    }, 15000);
+    }, 25000);
 
     return () => { clearTimeout(statusTimer); clearTimeout(partyTimer); };
-  }, []);
+  }, [userProfile]);
 
   // --- Actions ---
 
@@ -96,6 +199,8 @@ const App: React.FC = () => {
   };
 
   const handleCreateParty = () => {
+    if (!userProfile) return;
+    
     const newParty: Party = {
       id: `p${Date.now()}`,
       hostId: CURRENT_USER_ID,
@@ -107,7 +212,8 @@ const App: React.FC = () => {
       attendees: 1,
       location: { x: 0, y: 0 }, // Host is center
       distance: 0,
-      coverImage: `https://picsum.photos/400/200?random=${Date.now()}`
+      coverImage: `https://picsum.photos/400/200?random=${Date.now()}`,
+      icon: newPartyIcon
     };
     setParties([newParty, ...parties]);
     setActivePartyId(newParty.id);
@@ -119,6 +225,7 @@ const App: React.FC = () => {
     // Reset Form
     setNewPartyTitle('');
     setNewPartyDesc('');
+    setNewPartyIcon('pin');
   };
 
   const handleJoinParty = (partyId: string) => {
@@ -127,23 +234,72 @@ const App: React.FC = () => {
   };
 
   const handleSendMessage = (text: string) => {
+    if (!userProfile) return;
     const newMessage: Message = {
       id: `m${Date.now()}`,
       senderId: CURRENT_USER_ID,
-      senderName: 'Me',
+      senderName: userProfile.name,
       text,
       timestamp: new Date()
     };
     setMessages([...messages, newMessage]);
   };
 
+  const handleInviteFriends = async () => {
+    if (!userProfile) return;
+
+    // Construct Share URL
+    const baseUrl = window.location.origin + window.location.pathname;
+    let shareUrl = baseUrl;
+    let shareTitle = 'Join me on Uko?';
+    let shareText = 'Check out this app!';
+    
+    // Use URL query parameters to encode invite logic
+    // Format: ?partyId=123&invitedBy=User
+    if (activePartyId) {
+        shareUrl += `?partyId=${activePartyId}&invitedBy=${encodeURIComponent(userProfile.name)}`;
+        const party = parties.find(p => p.id === activePartyId);
+        shareTitle = `Join ${party?.title || 'the party'} on Uko?`;
+        shareText = `I'm at ${party?.title}. Hop in the squad chat!`;
+    } else {
+        shareUrl += `?invitedBy=${encodeURIComponent(userProfile.name)}`;
+        shareText = `Add me on Uko? - The Nightlife Radar.`;
+    }
+
+    const shareData = {
+        title: shareTitle,
+        text: shareText,
+        url: shareUrl
+    };
+
+    if (navigator.share) {
+        try {
+            await navigator.share(shareData);
+            addNotification('Invite Sent', 'Your squad has been summoned.', 'success');
+        } catch (err) {
+            console.log('Share canceled');
+        }
+    } else {
+        // Fallback for browsers without Web Share API
+        try {
+            await navigator.clipboard.writeText(shareUrl);
+            addNotification('Link Copied', 'Share the link with your friends!', 'info');
+        } catch (err) {
+            addNotification('Error', 'Could not copy link.', 'alert');
+        }
+    }
+  };
+
   const handleRate = (hype: number, safety: number) => {
-    // alert(`Thanks for voting! Hype: ${hype}/5, Safety: ${safety}/5`);
     addNotification('Vibe Check Complete', `You rated: ${hype}🔥 ${safety}🛡️`, 'success');
     setActiveTab('radar');
   };
 
   // --- Render Views ---
+
+  if (!userProfile) {
+    return <Onboarding onComplete={handleOnboardingComplete} />;
+  }
 
   const renderRadar = () => (
     <RadarView 
@@ -152,6 +308,7 @@ const App: React.FC = () => {
       radius={radarRadius} 
       setRadius={setRadarRadius}
       currentUserStatus={myStatus}
+      currentUserAvatar={userProfile.avatar}
       onToggleStatus={handleToggleStatus}
     />
   );
@@ -226,6 +383,30 @@ const App: React.FC = () => {
         </div>
 
         <div>
+          <label className="block text-gray-400 text-sm mb-2">Pin Icon</label>
+          <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
+            {PIN_ICONS.map((iconItem) => {
+              const IconComp = iconItem.Icon;
+              const isSelected = newPartyIcon === iconItem.id;
+              return (
+                <button
+                  key={iconItem.id}
+                  onClick={() => setNewPartyIcon(iconItem.id)}
+                  className={`flex flex-col items-center flex-shrink-0 p-2 rounded-lg border transition-all ${
+                    isSelected 
+                      ? 'border-neon-blue bg-neon-blue/20 text-white shadow-[0_0_10px_#04d9ff40]' 
+                      : 'border-gray-700 text-gray-500'
+                  }`}
+                >
+                  <IconComp size={24} className="mb-1" />
+                  <span className="text-[10px]">{iconItem.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        <div>
           <div className="flex justify-between items-center mb-2">
              <label className="text-gray-400 text-sm">Description</label>
              <button 
@@ -264,20 +445,35 @@ const App: React.FC = () => {
   const renderProfile = () => (
     <div className="p-6 bg-gray-900 min-h-screen flex flex-col items-center pt-12 text-white">
       <div className="w-24 h-24 rounded-full border-4 border-neon-purple p-1 mb-4 shadow-[0_0_20px_#b026ff]">
-        <img src="https://picsum.photos/200/200" alt="Profile" className="w-full h-full rounded-full object-cover" />
+        <img src={userProfile.avatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
       </div>
-      <h2 className="text-2xl font-bold">Party Animal</h2>
-      <p className="text-neon-green text-sm mb-8">Ready to Party</p>
+      <h2 className="text-2xl font-bold">{userProfile.name}</h2>
+      <p className="text-neon-green text-sm mb-8">{myStatus}</p>
 
       <div className="w-full space-y-4">
+        <button 
+            onClick={handleInviteFriends}
+            className="w-full bg-neon-card p-4 rounded-xl border border-gray-700 flex items-center justify-between hover:bg-gray-800 transition-colors"
+        >
+            <span className="flex items-center"><Navigation size={18} className="mr-3 text-neon-blue" /> Invite Squad</span>
+            <span className="text-gray-400 text-sm">Share Link</span>
+        </button>
+
         <div className="bg-neon-card p-4 rounded-xl border border-gray-800 flex justify-between">
            <span>Parties Attended</span>
-           <span className="font-bold text-neon-purple">42</span>
+           <span className="font-bold text-neon-purple">0</span>
         </div>
         <div className="bg-neon-card p-4 rounded-xl border border-gray-800 flex justify-between">
            <span>Avg Hype Rating</span>
-           <span className="font-bold text-neon-blue">4.8 🔥</span>
+           <span className="font-bold text-neon-blue">5.0 🔥</span>
         </div>
+
+        <button 
+            onClick={() => { localStorage.removeItem(USER_STORAGE_KEY); setUserProfile(null); }}
+            className="w-full mt-8 py-3 text-red-500 border border-red-900/50 rounded-xl hover:bg-red-900/20 text-sm"
+        >
+            Log Out
+        </button>
       </div>
     </div>
   );
@@ -299,6 +495,7 @@ const App: React.FC = () => {
               messages={messages}
               onSendMessage={handleSendMessage}
               onRate={handleRate}
+              onInvite={handleInviteFriends}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-500">

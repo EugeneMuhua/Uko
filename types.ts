@@ -35,6 +35,7 @@ export interface Party {
   location: { x: number; y: number };
   distance: number;
   coverImage: string;
+  icon: string; // Icon identifier for custom map pin
   hypeRating?: number; // 0-5
   safetyRating?: number; // 0-5
 }

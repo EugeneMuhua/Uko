@@ -1,5 +1,6 @@
+
 import React, { useState } from 'react';
-import { Radar, User as UserIcon, MapPin } from 'lucide-react';
+import { Radar, User as UserIcon, MapPin, Music, Martini, Gamepad2, Flame, Zap, Headphones } from 'lucide-react';
 import { User, Party, UserStatus } from '../types';
 
 interface RadarViewProps {
@@ -8,6 +9,7 @@ interface RadarViewProps {
   radius: number;
   setRadius: (r: number) => void;
   currentUserStatus: UserStatus;
+  currentUserAvatar?: string;
   onToggleStatus: () => void;
 }
 
@@ -17,6 +19,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
   radius, 
   setRadius,
   currentUserStatus,
+  currentUserAvatar,
   onToggleStatus
 }) => {
   
@@ -27,6 +30,19 @@ export const RadarView: React.FC<RadarViewProps> = ({
     const cssX = 50 + (x * scale);
     const cssY = 50 + (y * scale);
     return { left: `${cssX}%`, top: `${cssY}%` };
+  };
+
+  const renderPartyIcon = (iconName: string, className: string) => {
+    const props = { className };
+    switch(iconName) {
+        case 'music': return <Music {...props} />;
+        case 'drink': return <Martini {...props} />;
+        case 'game': return <Gamepad2 {...props} />;
+        case 'fire': return <Flame {...props} />;
+        case 'zap': return <Zap {...props} />;
+        case 'headphones': return <Headphones {...props} />;
+        default: return <MapPin {...props} />;
+    }
   };
 
   return (
@@ -78,7 +94,13 @@ export const RadarView: React.FC<RadarViewProps> = ({
         </div>
 
         {/* Center (You) */}
-        <div className="absolute z-20 w-4 h-4 bg-white rounded-full shadow-[0_0_15px_white] animate-pulse" />
+        <div className="absolute z-20 w-8 h-8 rounded-full shadow-[0_0_20px_white] ring-2 ring-white overflow-hidden">
+           <img 
+             src={currentUserAvatar || 'https://picsum.photos/50/50'} 
+             className="w-full h-full object-cover" 
+             alt="Me"
+           />
+        </div>
 
         {/* Render Users */}
         {users.map(u => {
@@ -112,7 +134,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
                style={pos}
                className="absolute z-10 transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
              >
-               <MapPin className="text-neon-purple w-8 h-8 drop-shadow-[0_0_8px_#b026ff] animate-bounce" />
+               {renderPartyIcon(p.icon, "text-neon-purple w-8 h-8 drop-shadow-[0_0_8px_#b026ff] animate-bounce")}
                <span className="absolute top-full left-1/2 -translate-x-1/2 text-[10px] text-neon-purple font-bold bg-black/70 px-2 py-0.5 rounded mt-1 whitespace-nowrap">
                  {p.title}
                </span>

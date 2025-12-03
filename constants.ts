@@ -1,3 +1,4 @@
+
 import { User, Party, UserStatus, VibeType } from './types';
 
 export const CURRENT_USER_ID = 'me';
@@ -49,7 +50,8 @@ export const MOCK_PARTIES: Party[] = [
     attendees: 12,
     location: { x: 10, y: 50 },
     distance: 0.8,
-    coverImage: 'https://picsum.photos/400/200?random=10'
+    coverImage: 'https://picsum.photos/400/200?random=10',
+    icon: 'music'
   },
   {
     id: 'p2',
@@ -62,7 +64,8 @@ export const MOCK_PARTIES: Party[] = [
     attendees: 45,
     location: { x: -60, y: -10 },
     distance: 2.5,
-    coverImage: 'https://picsum.photos/400/200?random=11'
+    coverImage: 'https://picsum.photos/400/200?random=11',
+    icon: 'zap'
   },
   {
     id: 'p3',
@@ -75,7 +78,8 @@ export const MOCK_PARTIES: Party[] = [
     attendees: 6,
     location: { x: 80, y: 20 },
     distance: 3.1,
-    coverImage: 'https://picsum.photos/400/200?random=12'
+    coverImage: 'https://picsum.photos/400/200?random=12',
+    icon: 'game'
   }
 ];
 

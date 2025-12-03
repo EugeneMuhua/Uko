@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, Zap } from 'lucide-react';
+import { Send, Users, Shield, Zap, Share2 } from 'lucide-react';
 import { Message, Party } from '../types';
 
 interface ChatInterfaceProps {
@@ -7,9 +7,10 @@ interface ChatInterfaceProps {
   messages: Message[];
   onSendMessage: (text: string) => void;
   onRate: (hype: number, safety: number) => void;
+  onInvite: () => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, onSendMessage, onRate }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, onSendMessage, onRate, onInvite }) => {
   const [inputText, setInputText] = useState('');
   const [showRating, setShowRating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -31,7 +32,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
   // Check if party is "over" to show rating (Simulated)
   useEffect(() => {
     // Auto trigger rating modal for demo purposes after 10 seconds in chat
-    const timer = setTimeout(() => setShowRating(true), 15000); 
+    const timer = setTimeout(() => setShowRating(true), 30000); 
     return () => clearTimeout(timer);
   }, []);
 
@@ -84,8 +85,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
             Live Squad ({party.attendees} online)
           </div>
         </div>
-        <div className="bg-gray-800 p-2 rounded-full">
-          <Users size={20} className="text-gray-300" />
+        <div className="flex space-x-2">
+            <button 
+                onClick={onInvite}
+                className="bg-gray-800 p-2 rounded-full hover:bg-neon-blue hover:text-white transition-colors"
+            >
+                <Share2 size={20} className="text-gray-300" />
+            </button>
+            <div className="bg-gray-800 p-2 rounded-full">
+                <Users size={20} className="text-gray-300" />
+            </div>
         </div>
       </div>
 
