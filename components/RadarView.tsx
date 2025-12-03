@@ -1,6 +1,6 @@
 
-import React, { useState } from 'react';
-import { Radar, User as UserIcon, MapPin, Music, Martini, Gamepad2, Flame, Zap, Headphones } from 'lucide-react';
+import React from 'react';
+import { Radar, User as UserIcon, MapPin, Music, Martini, Gamepad2, Flame, Zap, Headphones, Ghost } from 'lucide-react';
 import { User, Party, UserStatus } from '../types';
 
 interface RadarViewProps {
@@ -10,6 +10,7 @@ interface RadarViewProps {
   setRadius: (r: number) => void;
   currentUserStatus: UserStatus;
   currentUserAvatar?: string;
+  isGhostMode: boolean;
   onToggleStatus: () => void;
 }
 
@@ -20,12 +21,11 @@ export const RadarView: React.FC<RadarViewProps> = ({
   setRadius,
   currentUserStatus,
   currentUserAvatar,
+  isGhostMode,
   onToggleStatus
 }) => {
   
-  // Helper to map relative coords (-100 to 100) to CSS percentages
   const getPosition = (x: number, y: number) => {
-    // scale based on selected radius (simulation)
     const scale = 5 / radius; 
     const cssX = 50 + (x * scale);
     const cssY = 50 + (y * scale);
@@ -33,6 +33,14 @@ export const RadarView: React.FC<RadarViewProps> = ({
   };
 
   const renderPartyIcon = (iconName: string, className: string) => {
+    if (iconName.startsWith('http') || iconName.startsWith('data:')) {
+      return (
+        <div className={`${className} rounded-full border-2 border-neon-purple overflow-hidden bg-black p-0.5`}>
+          <img src={iconName} alt="Pin" className="w-full h-full object-cover rounded-full" />
+        </div>
+      );
+    }
+
     const props = { className };
     switch(iconName) {
         case 'music': return <Music {...props} />;
@@ -81,20 +89,25 @@ export const RadarView: React.FC<RadarViewProps> = ({
         </button>
       </div>
 
+      {/* Ghost Mode Indicator */}
+      {isGhostMode && (
+        <div className="absolute top-16 right-4 z-10 bg-black/60 border border-white/10 text-neon-purple px-3 py-1 rounded-full text-[10px] flex items-center backdrop-blur animate-pulse border-neon-purple/50">
+          <Ghost size={12} className="mr-1" /> Ghost Mode Active
+        </div>
+      )}
+
       {/* The Radar Scanner */}
       <div className="flex-1 relative flex items-center justify-center mt-8">
-        {/* Rings */}
         <div className="absolute w-[80vw] h-[80vw] border border-neon-purple/20 rounded-full" />
         <div className="absolute w-[50vw] h-[50vw] border border-neon-purple/20 rounded-full" />
         <div className="absolute w-[20vw] h-[20vw] border border-neon-purple/20 rounded-full bg-neon-purple/5" />
         
-        {/* Scanning Line */}
         <div className="absolute w-[80vw] h-[80vw] rounded-full overflow-hidden opacity-30 pointer-events-none">
            <div className="w-full h-1/2 bg-gradient-to-t from-neon-purple/40 to-transparent origin-bottom animate-spin-slow absolute top-0 left-0" />
         </div>
 
         {/* Center (You) */}
-        <div className="absolute z-20 w-8 h-8 rounded-full shadow-[0_0_20px_white] ring-2 ring-white overflow-hidden">
+        <div className={`absolute z-20 w-8 h-8 rounded-full shadow-[0_0_20px_white] ring-2 ring-white overflow-hidden transition-opacity ${isGhostMode ? 'opacity-50 grayscale ring-gray-500' : ''}`}>
            <img 
              src={currentUserAvatar || 'https://picsum.photos/50/50'} 
              className="w-full h-full object-cover" 
@@ -105,6 +118,9 @@ export const RadarView: React.FC<RadarViewProps> = ({
         {/* Render Users */}
         {users.map(u => {
           if (u.distance > radius) return null;
+          // CRITICAL CHANGE: Do not render users if they are in Ghost Mode
+          if (u.isGhost) return null;
+          
           const pos = getPosition(u.location.x, u.location.y);
           return (
             <div 
@@ -128,15 +144,25 @@ export const RadarView: React.FC<RadarViewProps> = ({
         {parties.map(p => {
            if (p.distance > radius) return null;
            const pos = getPosition(p.location.x, p.location.y);
+           // Hype Logic: if score > 50, pulse hard
+           const isHyped = (p.hypeScore || 0) > 50;
+           
            return (
              <div 
                key={p.id}
                style={pos}
                className="absolute z-10 transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
              >
-               {renderPartyIcon(p.icon, "text-neon-purple w-8 h-8 drop-shadow-[0_0_8px_#b026ff] animate-bounce")}
+               {/* Hype Ripple */}
+               {isHyped && (
+                  <div className="absolute inset-0 rounded-full bg-neon-purple opacity-50 animate-ping-slow scale-150" />
+               )}
+
+               {renderPartyIcon(p.icon, `text-neon-purple w-8 h-8 drop-shadow-[0_0_8px_#b026ff] animate-bounce ${isHyped ? 'text-white' : ''}`)}
+               
                <span className="absolute top-full left-1/2 -translate-x-1/2 text-[10px] text-neon-purple font-bold bg-black/70 px-2 py-0.5 rounded mt-1 whitespace-nowrap">
                  {p.title}
+                 {p.entryFee && p.entryFee > 0 && <span className="text-neon-green ml-1">$</span>}
                </span>
              </div>
            )
@@ -144,7 +170,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
       </div>
       
       <div className="p-4 text-center text-gray-500 text-xs pb-24">
-        Scanning area... {users.filter(u => u.distance <= radius).length} active nearby
+        Scanning area... {users.filter(u => u.distance <= radius && !u.isGhost).length} active nearby
       </div>
     </div>
   );

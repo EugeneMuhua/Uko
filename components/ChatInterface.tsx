@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, Zap, Share2 } from 'lucide-react';
+import { Send, Users, Shield, Zap, Share2, Car, Flame, ShieldCheck } from 'lucide-react';
 import { Message, Party } from '../types';
+import { MusicPlayer } from './MusicPlayer';
 
 interface ChatInterfaceProps {
   party: Party;
@@ -8,9 +10,10 @@ interface ChatInterfaceProps {
   onSendMessage: (text: string) => void;
   onRate: (hype: number, safety: number) => void;
   onInvite: () => void;
+  onHype: () => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, onSendMessage, onRate, onInvite }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, onSendMessage, onRate, onInvite, onHype }) => {
   const [inputText, setInputText] = useState('');
   const [showRating, setShowRating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -29,10 +32,27 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
     setInputText('');
   };
 
-  // Check if party is "over" to show rating (Simulated)
+  const handleGetRide = () => {
+     // Center Nairobi Coordinates (Mock origin)
+     const centerLat = -1.2921;
+     const centerLng = 36.8219;
+     
+     // Convert relative x/y (assumed km) to approximate Lat/Lng offsets
+     // 1 deg lat ~= 111km, 1 deg lng ~= 111km at equator
+     const destLat = centerLat + (party.location.y / 111);
+     const destLng = centerLng + (party.location.x / 111);
+
+     // Generate Deep Link
+     const url = `uber://?action=setPickup&dropoff[latitude]=${destLat.toFixed(6)}&dropoff[longitude]=${destLng.toFixed(6)}&dropoff[nickname]=${encodeURIComponent(party.title)}`;
+     
+     console.log('Generated Ride URL:', url);
+     
+     // Attempt to open deep link
+     window.open(url, '_blank');
+  };
+
   useEffect(() => {
-    // Auto trigger rating modal for demo purposes after 10 seconds in chat
-    const timer = setTimeout(() => setShowRating(true), 30000); 
+    const timer = setTimeout(() => setShowRating(true), 60000); // 1 minute demo delay
     return () => clearTimeout(timer);
   }, []);
 
@@ -77,26 +97,52 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
   return (
     <div className="flex flex-col h-full bg-gray-900">
       {/* Header */}
-      <div className="p-4 bg-neon-card border-b border-gray-800 flex justify-between items-center shadow-lg z-10">
-        <div>
-          <h2 className="font-bold text-white text-lg">{party.title}</h2>
-          <div className="flex items-center text-xs text-neon-green">
-            <span className="w-2 h-2 bg-neon-green rounded-full mr-2 animate-pulse" />
-            Live Squad ({party.attendees} online)
+      <div className="p-4 bg-neon-card border-b border-gray-800 shadow-lg z-10">
+        <div className="flex justify-between items-start mb-2">
+          <div>
+            <h2 className="font-bold text-white text-lg flex items-center">
+              {party.title} 
+              {(party.hostTrustScore || 0) > 80 && <ShieldCheck size={16} className="text-neon-blue ml-2" />}
+            </h2>
+            <div className="flex items-center text-xs text-neon-green">
+              <span className="w-2 h-2 bg-neon-green rounded-full mr-2 animate-pulse" />
+              Live Squad ({party.attendees} online)
+            </div>
           </div>
-        </div>
-        <div className="flex space-x-2">
+          <div className="flex space-x-2">
+            <button 
+                onClick={handleGetRide}
+                className="bg-gray-800 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
+                title="Get Me There (Uber)"
+            >
+                <Car size={20} />
+            </button>
             <button 
                 onClick={onInvite}
                 className="bg-gray-800 p-2 rounded-full hover:bg-neon-blue hover:text-white transition-colors"
+                title="Invite Squad"
             >
                 <Share2 size={20} className="text-gray-300" />
             </button>
-            <div className="bg-gray-800 p-2 rounded-full">
-                <Users size={20} className="text-gray-300" />
-            </div>
+          </div>
         </div>
+        
+        {/* Hype Button */}
+        <button 
+            onClick={onHype}
+            className="w-full mt-2 bg-gradient-to-r from-orange-600 to-red-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center space-x-1 active:scale-95 transition-transform"
+        >
+            <Flame size={14} fill="currentColor" />
+            <span>BOOST VIBE ({party.hypeScore || 0})</span>
+        </button>
       </div>
+
+      {/* Music Player */}
+      {party.musicTrack && (
+         <div className="mt-2">
+             <MusicPlayer track={party.musicTrack} />
+         </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">

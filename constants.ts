@@ -10,7 +10,8 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://picsum.photos/50/50?random=1',
     status: UserStatus.READY,
     location: { x: 20, y: -30 },
-    distance: 0.5
+    distance: 0.5,
+    badges: ['Night Owl', 'DJ']
   },
   {
     id: 'u2',
@@ -18,7 +19,8 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://picsum.photos/50/50?random=2',
     status: UserStatus.CHILLING,
     location: { x: -45, y: 10 },
-    distance: 1.2
+    distance: 1.2,
+    badges: ['Safe Host']
   },
   {
     id: 'u3',
@@ -26,7 +28,8 @@ export const MOCK_USERS: User[] = [
     avatar: 'https://picsum.photos/50/50?random=3',
     status: UserStatus.HOSTING,
     location: { x: 10, y: 50 },
-    distance: 0.8
+    distance: 0.8,
+    badges: ['Legend']
   },
   {
     id: 'u4',
@@ -51,7 +54,15 @@ export const MOCK_PARTIES: Party[] = [
     location: { x: 10, y: 50 },
     distance: 0.8,
     coverImage: 'https://picsum.photos/400/200?random=10',
-    icon: 'music'
+    icon: 'music',
+    entryFee: 0,
+    hostTrustScore: 95,
+    hypeScore: 65, // High hype
+    musicTrack: {
+      title: 'Unavailable',
+      artist: 'Davido',
+      coverUrl: 'https://picsum.photos/60/60?random=100'
+    }
   },
   {
     id: 'p2',
@@ -65,7 +76,10 @@ export const MOCK_PARTIES: Party[] = [
     location: { x: -60, y: -10 },
     distance: 2.5,
     coverImage: 'https://picsum.photos/400/200?random=11',
-    icon: 'zap'
+    icon: 'zap',
+    entryFee: 500, // KES
+    hostTrustScore: 88,
+    hypeScore: 20
   },
   {
     id: 'p3',
@@ -79,14 +93,8 @@ export const MOCK_PARTIES: Party[] = [
     location: { x: 80, y: 20 },
     distance: 3.1,
     coverImage: 'https://picsum.photos/400/200?random=12',
-    icon: 'game'
+    icon: 'game',
+    entryFee: 200,
+    hostTrustScore: 92
   }
 ];
-
-// In a real backend (e.g., Firestore/PostGIS):
-// You would store User/Party documents with a GeoPoint (lat, lng).
-// To find nearby items, you'd use a geospatial query.
-// Firestore Example:
-// const center = new firebase.firestore.GeoPoint(lat, lng);
-// const bounds = getGeohashBounds(center, radiusInMeters);
-// query.where('geohash', '>=', bounds[0]).where('geohash', '<=', bounds[1]);

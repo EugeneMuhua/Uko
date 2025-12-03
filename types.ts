@@ -14,6 +14,12 @@ export enum VibeType {
   GAMING = 'Gaming'
 }
 
+export interface MusicTrack {
+  title: string;
+  artist: string;
+  coverUrl: string;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -21,6 +27,8 @@ export interface User {
   status: UserStatus;
   location: { x: number; y: number }; // Relative coordinates for radar (0,0 is center)
   distance: number; // in km
+  isGhost?: boolean;
+  badges?: string[];
 }
 
 export interface Party {
@@ -28,16 +36,20 @@ export interface Party {
   hostId: string;
   title: string;
   description: string;
-  vibe: VibeType;
+  vibe: string; 
   startTime: string;
   capacity: number;
   attendees: number;
   location: { x: number; y: number };
   distance: number;
   coverImage: string;
-  icon: string; // Icon identifier for custom map pin
+  icon: string; 
   hypeRating?: number; // 0-5
   safetyRating?: number; // 0-5
+  entryFee?: number; // 0 = Free
+  hostTrustScore?: number; // 0-100%
+  hypeScore?: number; // Dynamic counter for current party
+  musicTrack?: MusicTrack;
 }
 
 export interface Message {

@@ -1,10 +1,12 @@
 
-import React, { useState, useEffect } from 'react';
-import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award } from 'lucide-react';
 import { RadarView } from './components/RadarView';
 import { ChatInterface } from './components/ChatInterface';
 import { NotificationSystem } from './components/NotificationSystem';
 import { Onboarding } from './components/Onboarding';
+import { SOSButton } from './components/SOSButton';
+import { PaymentModal } from './components/PaymentModal';
 import { generatePartyHype } from './services/geminiService';
 import { 
   MOCK_USERS, MOCK_PARTIES, CURRENT_USER_ID 
@@ -39,6 +41,11 @@ const App: React.FC = () => {
   const [myStatus, setMyStatus] = useState<UserStatus>(UserStatus.READY);
   const [radarRadius, setRadarRadius] = useState(5); // km
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  
+  // --- New Feature State ---
+  const [isGhostMode, setIsGhostMode] = useState(false);
+  const [showPaymentFor, setShowPaymentFor] = useState<Party | null>(null);
+  const [sosTriggered, setSosTriggered] = useState(false);
 
   // --- Invite Handling State ---
   const [pendingPartyId, setPendingPartyId] = useState<string | null>(null);
@@ -53,21 +60,23 @@ const App: React.FC = () => {
 
   // --- Create Party State ---
   const [newPartyTitle, setNewPartyTitle] = useState('');
-  const [newPartyVibe, setNewPartyVibe] = useState<VibeType>(VibeType.CHILL);
+  const [newPartyVibe, setNewPartyVibe] = useState<string>(VibeType.CHILL);
+  const [isCustomVibe, setIsCustomVibe] = useState(false);
   const [newPartyDesc, setNewPartyDesc] = useState('');
   const [newPartyIcon, setNewPartyIcon] = useState('pin');
+  const [newPartyEntryFee, setNewPartyEntryFee] = useState<number>(0);
+  const [newPartyLocation, setNewPartyLocation] = useState({ x: 0, y: 0 }); 
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // --- Initialization Effects ---
   
   useEffect(() => {
-    // 1. Check Local Storage for Auth
     const savedUser = localStorage.getItem(USER_STORAGE_KEY);
     if (savedUser) {
       setUserProfile(JSON.parse(savedUser));
     }
 
-    // 2. Parse URL for Invites
     const params = new URLSearchParams(window.location.search);
     const partyIdParam = params.get('partyId');
     const invitedByParam = params.get('invitedBy');
@@ -75,13 +84,11 @@ const App: React.FC = () => {
     if (partyIdParam) setPendingPartyId(partyIdParam);
     if (invitedByParam) setInvitingUserId(invitedByParam);
 
-    // Clean URL to prevent re-triggering on refresh
     if (partyIdParam || invitedByParam) {
         window.history.replaceState({}, document.title, window.location.pathname);
     }
   }, []);
 
-  // --- Process Invite Once Logged In ---
   useEffect(() => {
     if (userProfile && (pendingPartyId || invitingUserId)) {
         handleProcessInvite();
@@ -92,7 +99,6 @@ const App: React.FC = () => {
     if (pendingPartyId) {
         let targetParty = parties.find(p => p.id === pendingPartyId);
         
-        // If party doesn't exist in our mock data (simulating a fresh fetch)
         if (!targetParty) {
             targetParty = {
                 id: pendingPartyId,
@@ -102,23 +108,22 @@ const App: React.FC = () => {
                 vibe: VibeType.RAGER,
                 startTime: 'Now',
                 capacity: 50,
-                attendees: 1, // You are the first visible
+                attendees: 1, 
                 location: { x: 5, y: 5 },
                 distance: 0.1,
                 coverImage: 'https://picsum.photos/400/200?random=invite',
-                icon: 'zap'
+                icon: 'zap',
+                hypeScore: 0
             };
             setParties(prev => [targetParty!, ...prev]);
         }
 
-        setActivePartyId(pendingPartyId);
-        setActiveTab('chat');
-        addNotification('Squad Invite Accepted', `Welcome to ${targetParty.title}!`, 'success');
-        setPendingPartyId(null); // Clear pending
+        // Check if invited party is paid
+        handleJoinParty(targetParty);
+        setPendingPartyId(null);
     } else if (invitingUserId) {
-        // Generic app invite
         addNotification('Friend Connected', `You joined via an invite from ${invitingUserId === 'me' ? 'a friend' : invitingUserId}.`, 'info');
-        setInvitingUserId(null); // Clear pending
+        setInvitingUserId(null); 
     }
   };
 
@@ -126,13 +131,11 @@ const App: React.FC = () => {
     const profile = { name, avatar };
     localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(profile));
     setUserProfile(profile);
-    // Notification logic handled in useEffect now
     if (!pendingPartyId && !invitingUserId) {
         addNotification('Welcome to Uko?', `You're on the radar, ${name}! 📡`, 'success');
     }
   };
 
-  // --- Notification Logic ---
   const addNotification = (title: string, message: string, type: NotificationType) => {
     const newNotif: AppNotification = {
       id: `n${Date.now()}`,
@@ -152,14 +155,13 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!userProfile) return;
 
-    // Simulate a friend changing status after 15 seconds
+    // Simulate Kofi changing status
     const statusTimer = setTimeout(() => {
       addNotification('Squad Update', 'Kofi is now Ready to Party! 🟢', 'info');
-      // Update local user state to match
       setUsers(prev => prev.map(u => u.name === 'Kofi' ? {...u, status: UserStatus.READY} : u));
     }, 15000);
 
-    // Simulate a new party appearing nearby after 25 seconds
+    // Simulate new party drop
     const partyTimer = setTimeout(() => {
       addNotification('New Drop Detected 📍', "Secret Beach Bonfire (1.5km)", 'party');
       const newSimParty: Party = {
@@ -174,13 +176,37 @@ const App: React.FC = () => {
         location: { x: 35, y: -40 },
         distance: 1.5,
         coverImage: 'https://picsum.photos/400/200?random=99',
-        icon: 'fire'
+        icon: 'fire',
+        hypeScore: 60 // Already hyped
       };
       setParties(prev => [...prev, newSimParty]);
     }, 25000);
 
-    return () => { clearTimeout(statusTimer); clearTimeout(partyTimer); };
+    // Simulate a user (Amani) toggling Ghost Mode to show Radar Logic
+    const ghostTimer = setInterval(() => {
+        setUsers(prev => prev.map(u => {
+            if (u.id === 'u2') { // Amani
+                return { ...u, isGhost: !u.isGhost };
+            }
+            return u;
+        }));
+    }, 8000);
+
+    return () => { clearTimeout(statusTimer); clearTimeout(partyTimer); clearInterval(ghostTimer); };
   }, [userProfile]);
+
+  // --- Safe Check Logic (Module 1) ---
+  useEffect(() => {
+    // If user leaves chat (ends party or minimizes), trigger a check later
+    // Logic: If user is "in a party" (activePartyId) but not on the 'chat' screen
+    if (activeTab !== 'chat' && activePartyId) {
+       const timer = setTimeout(() => {
+          addNotification('Safe Check 🏠', 'Did you get home safe?', 'alert');
+       }, 30000); // 30s timer
+       
+       return () => clearTimeout(timer);
+    }
+  }, [activeTab, activePartyId]);
 
   // --- Actions ---
 
@@ -198,6 +224,28 @@ const App: React.FC = () => {
     setIsGeneratingAI(false);
   };
 
+  const handleIconUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewPartyIcon(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleLocationSelect = (e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const width = rect.width;
+    const height = rect.height;
+    const relX = ((x / width) * 200) - 100;
+    const relY = ((y / height) * 200) - 100;
+    setNewPartyLocation({ x: relX, y: relY });
+  };
+
   const handleCreateParty = () => {
     if (!userProfile) return;
     
@@ -210,27 +258,48 @@ const App: React.FC = () => {
       startTime: 'Now',
       capacity: 50,
       attendees: 1,
-      location: { x: 0, y: 0 }, // Host is center
-      distance: 0,
+      location: newPartyLocation, 
+      distance: 0.1, 
       coverImage: `https://picsum.photos/400/200?random=${Date.now()}`,
-      icon: newPartyIcon
+      icon: newPartyIcon,
+      entryFee: newPartyEntryFee,
+      hypeScore: 0
     };
     setParties([newParty, ...parties]);
     setActivePartyId(newParty.id);
     setActiveTab('chat');
     
-    // Notify User
     addNotification('Party Live! 📡', 'Your beacon has been broadcast to nearby users.', 'success');
 
-    // Reset Form
     setNewPartyTitle('');
     setNewPartyDesc('');
     setNewPartyIcon('pin');
+    setNewPartyLocation({ x: 0, y: 0 });
+    setNewPartyVibe(VibeType.CHILL);
+    setNewPartyEntryFee(0);
+    setIsCustomVibe(false);
   };
 
-  const handleJoinParty = (partyId: string) => {
+  const handleJoinParty = (party: Party) => {
+    // Logic for Payment Gate
+    if (party.entryFee && party.entryFee > 0) {
+        setShowPaymentFor(party);
+    } else {
+        enterParty(party.id);
+    }
+  };
+
+  const enterParty = (partyId: string) => {
     setActivePartyId(partyId);
     setActiveTab('chat');
+  };
+
+  const handlePaymentSuccess = () => {
+    if (showPaymentFor) {
+        enterParty(showPaymentFor.id);
+        setShowPaymentFor(null);
+        addNotification('Ticket Purchased', `You have joined ${showPaymentFor.title}!`, 'success');
+    }
   };
 
   const handleSendMessage = (text: string) => {
@@ -245,17 +314,28 @@ const App: React.FC = () => {
     setMessages([...messages, newMessage]);
   };
 
+  const handleBoostHype = () => {
+    if (activePartyId) {
+        setParties(prev => prev.map(p => {
+            if (p.id === activePartyId) {
+                const newScore = (p.hypeScore || 0) + 10;
+                if (newScore > 50 && (p.hypeScore || 0) <= 50) {
+                     addNotification('VIBE CHECK 🔥', `${p.title} is now trending on Radar!`, 'party');
+                }
+                return { ...p, hypeScore: newScore };
+            }
+            return p;
+        }));
+    }
+  };
+
   const handleInviteFriends = async () => {
     if (!userProfile) return;
-
-    // Construct Share URL
     const baseUrl = window.location.origin + window.location.pathname;
     let shareUrl = baseUrl;
     let shareTitle = 'Join me on Uko?';
     let shareText = 'Check out this app!';
     
-    // Use URL query parameters to encode invite logic
-    // Format: ?partyId=123&invitedBy=User
     if (activePartyId) {
         shareUrl += `?partyId=${activePartyId}&invitedBy=${encodeURIComponent(userProfile.name)}`;
         const party = parties.find(p => p.id === activePartyId);
@@ -266,33 +346,25 @@ const App: React.FC = () => {
         shareText = `Add me on Uko? - The Nightlife Radar.`;
     }
 
-    const shareData = {
-        title: shareTitle,
-        text: shareText,
-        url: shareUrl
-    };
+    const shareData = { title: shareTitle, text: shareText, url: shareUrl };
 
     if (navigator.share) {
-        try {
-            await navigator.share(shareData);
-            addNotification('Invite Sent', 'Your squad has been summoned.', 'success');
-        } catch (err) {
-            console.log('Share canceled');
-        }
+        try { await navigator.share(shareData); addNotification('Invite Sent', 'Your squad has been summoned.', 'success'); } catch (err) {}
     } else {
-        // Fallback for browsers without Web Share API
-        try {
-            await navigator.clipboard.writeText(shareUrl);
-            addNotification('Link Copied', 'Share the link with your friends!', 'info');
-        } catch (err) {
-            addNotification('Error', 'Could not copy link.', 'alert');
-        }
+        try { await navigator.clipboard.writeText(shareUrl); addNotification('Link Copied', 'Share the link with your friends!', 'info'); } catch (err) { addNotification('Error', 'Could not copy link.', 'alert'); }
     }
   };
 
   const handleRate = (hype: number, safety: number) => {
     addNotification('Vibe Check Complete', `You rated: ${hype}🔥 ${safety}🛡️`, 'success');
     setActiveTab('radar');
+  };
+
+  const handleSOSTrigger = () => {
+      setSosTriggered(true);
+      addNotification('SOS ALERT SENT', 'Notifying trusted contacts and authorities...', 'alert');
+      // In a real app, this sends loc data to backend
+      setTimeout(() => setSosTriggered(false), 5000); // Reset for demo
   };
 
   // --- Render Views ---
@@ -309,6 +381,7 @@ const App: React.FC = () => {
       setRadius={setRadarRadius}
       currentUserStatus={myStatus}
       currentUserAvatar={userProfile.avatar}
+      isGhostMode={isGhostMode}
       onToggleStatus={handleToggleStatus}
     />
   );
@@ -317,29 +390,43 @@ const App: React.FC = () => {
     <div className="p-4 pb-24 space-y-4 bg-gray-900 min-h-screen">
       <h2 className="text-2xl font-bold text-white mb-4">Nearby Parties</h2>
       {parties.sort((a,b) => a.distance - b.distance).map(party => (
-        <div key={party.id} className="bg-neon-card rounded-xl overflow-hidden shadow-lg border border-gray-800">
+        <div key={party.id} className="bg-neon-card rounded-xl overflow-hidden shadow-lg border border-gray-800 relative">
           <div className="h-32 bg-cover bg-center relative" style={{ backgroundImage: `url(${party.coverImage})` }}>
             <div className="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs text-white font-bold">
               {party.distance}km away
             </div>
+            {party.entryFee && party.entryFee > 0 && (
+                 <div className="absolute top-2 left-2 bg-green-600 px-2 py-1 rounded text-xs text-white font-bold shadow-lg flex items-center">
+                    <span className="mr-1 text-[10px]">KES</span> {party.entryFee}
+                 </div>
+            )}
             <div className="absolute bottom-2 left-2">
               <span className={`px-2 py-1 rounded text-xs font-bold text-black ${
-                party.vibe === VibeType.RAGER ? 'bg-neon-green' : 'bg-neon-blue'
+                 Object.values(VibeType).includes(party.vibe as VibeType) 
+                    ? party.vibe === VibeType.RAGER ? 'bg-neon-green' : 'bg-neon-blue'
+                    : 'bg-neon-purple text-white'
               }`}>{party.vibe}</span>
             </div>
           </div>
           <div className="p-4">
-            <h3 className="text-lg font-bold text-white">{party.title}</h3>
+            <h3 className="text-lg font-bold text-white flex justify-between">
+                {party.title}
+                {(party.hypeScore || 0) > 50 && <span className="text-xs text-orange-500 flex items-center"><Flame size={12}/> Trending</span>}
+            </h3>
             <p className="text-gray-400 text-sm mt-1">{party.description}</p>
             <div className="flex justify-between items-center mt-4">
               <div className="text-xs text-gray-500">
                 {party.attendees}/{party.capacity} joined
               </div>
               <button 
-                onClick={() => handleJoinParty(party.id)}
-                className="bg-neon-purple text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-purple-600 transition-colors shadow-[0_0_10px_#b026ff40]"
+                onClick={() => handleJoinParty(party)}
+                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-[0_0_10px_#b026ff40] ${
+                  party.entryFee && party.entryFee > 0 
+                  ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/50' 
+                  : 'bg-neon-purple text-white hover:bg-purple-600'
+                }`}
               >
-                Join Squad
+                {party.entryFee && party.entryFee > 0 ? 'Buy Ticket' : 'Join Squad'}
               </button>
             </div>
           </div>
@@ -364,9 +451,20 @@ const App: React.FC = () => {
         </div>
 
         <div>
+            <label className="block text-gray-400 text-sm mb-2">Entry Fee (KES)</label>
+            <input 
+                type="number"
+                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-green-500 focus:outline-none"
+                placeholder="0 for Free"
+                value={newPartyEntryFee || ''}
+                onChange={(e) => setNewPartyEntryFee(Number(e.target.value))}
+            />
+        </div>
+
+        <div>
           <label className="block text-gray-400 text-sm mb-2">The Vibe</label>
-          <div className="grid grid-cols-3 gap-2">
-            {Object.values(VibeType).map((vibe) => (
+          <div className="grid grid-cols-3 gap-2 mb-2">
+            {!isCustomVibe && Object.values(VibeType).map((vibe) => (
               <button
                 key={vibe}
                 onClick={() => setNewPartyVibe(vibe)}
@@ -379,31 +477,82 @@ const App: React.FC = () => {
                 {vibe}
               </button>
             ))}
+             <button
+                onClick={() => { setIsCustomVibe(!isCustomVibe); if(!isCustomVibe) setNewPartyVibe(''); }}
+                className={`p-2 rounded-lg text-xs font-bold border transition-all ${
+                  isCustomVibe 
+                    ? 'border-neon-purple bg-neon-purple/20 text-white col-span-3' 
+                    : 'border-gray-700 text-gray-500 border-dashed hover:border-neon-blue hover:text-neon-blue'
+                }`}
+              >
+                {isCustomVibe ? 'Cancel' : '+ Custom'}
+              </button>
           </div>
+          {isCustomVibe && (
+              <input 
+                className="w-full bg-gray-800 border border-neon-purple rounded-lg p-3 text-white focus:outline-none animate-fadeIn"
+                placeholder="e.g. 80s Disco..."
+                value={newPartyVibe}
+                onChange={(e) => setNewPartyVibe(e.target.value)}
+                autoFocus
+              />
+          )}
         </div>
 
         <div>
-          <label className="block text-gray-400 text-sm mb-2">Pin Icon</label>
-          <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
-            {PIN_ICONS.map((iconItem) => {
-              const IconComp = iconItem.Icon;
-              const isSelected = newPartyIcon === iconItem.id;
-              return (
+            <div className="flex justify-between items-end mb-2">
+                <label className="block text-gray-400 text-sm">Pin Icon</label>
+                <input type="file" ref={fileInputRef} onChange={handleIconUpload} accept="image/*" className="hidden" />
+            </div>
+            
+            <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
                 <button
-                  key={iconItem.id}
-                  onClick={() => setNewPartyIcon(iconItem.id)}
-                  className={`flex flex-col items-center flex-shrink-0 p-2 rounded-lg border transition-all ${
-                    isSelected 
-                      ? 'border-neon-blue bg-neon-blue/20 text-white shadow-[0_0_10px_#04d9ff40]' 
-                      : 'border-gray-700 text-gray-500'
-                  }`}
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`flex flex-col items-center justify-center flex-shrink-0 p-2 w-14 h-14 rounded-lg border border-dashed border-gray-600 text-gray-500 hover:border-neon-blue hover:text-neon-blue transition-colors`}
                 >
-                  <IconComp size={24} className="mb-1" />
-                  <span className="text-[10px]">{iconItem.label}</span>
+                    <Upload size={20} />
+                    <span className="text-[9px] mt-1">Upload</span>
                 </button>
-              );
-            })}
-          </div>
+
+                {PIN_ICONS.map((iconItem) => {
+                const IconComp = iconItem.Icon;
+                const isSelected = newPartyIcon === iconItem.id;
+                return (
+                    <button
+                    key={iconItem.id}
+                    onClick={() => setNewPartyIcon(iconItem.id)}
+                    className={`flex flex-col items-center flex-shrink-0 p-2 rounded-lg border transition-all w-14 ${
+                        isSelected ? 'border-neon-blue bg-neon-blue/20 text-white shadow-[0_0_10px_#04d9ff40]' : 'border-gray-700 text-gray-500'
+                    }`}
+                    >
+                    <IconComp size={24} className="mb-1" />
+                    <span className="text-[10px]">{iconItem.label}</span>
+                    </button>
+                );
+                })}
+            </div>
+        </div>
+
+        <div>
+            <label className="block text-gray-400 text-sm mb-2">Set Exact Location (Tap)</label>
+            <div 
+                className="w-full aspect-square bg-gray-800 rounded-xl border border-gray-700 relative overflow-hidden cursor-crosshair group shadow-inner"
+                onClick={handleLocationSelect}
+            >
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                    <div className="w-full h-[1px] bg-neon-purple"></div>
+                    <div className="h-full w-[1px] bg-neon-purple absolute"></div>
+                    <div className="w-[50%] h-[50%] rounded-full border border-neon-purple"></div>
+                </div>
+                <div className="absolute top-1/2 left-1/2 w-3 h-3 bg-white rounded-full -translate-x-1/2 -translate-y-1/2 shadow-[0_0_10px_white] z-10 pointer-events-none" />
+                <span className="absolute top-1/2 left-1/2 mt-2 -ml-3 text-[10px] text-gray-400">You</span>
+                <div 
+                    className="absolute w-8 h-8 text-neon-green -translate-x-1/2 -translate-y-1/2 transition-all duration-300 pointer-events-none drop-shadow-[0_0_8px_#39ff14]"
+                    style={{ left: `${50 + (newPartyLocation.x / 2)}%`, top: `${50 + (newPartyLocation.y / 2)}%` }}
+                >
+                    <MapPin size={32} fill="currentColor" className="opacity-90" />
+                </div>
+            </div>
         </div>
 
         <div>
@@ -448,9 +597,32 @@ const App: React.FC = () => {
         <img src={userProfile.avatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
       </div>
       <h2 className="text-2xl font-bold">{userProfile.name}</h2>
-      <p className="text-neon-green text-sm mb-8">{myStatus}</p>
+      <p className="text-neon-green text-sm mb-4">{myStatus}</p>
+
+      {/* Badges */}
+      <div className="flex space-x-2 mb-8">
+         {['Night Owl', 'Verified', 'Safe Host'].map(b => (
+            <span key={b} className="bg-gray-800 text-xs px-2 py-1 rounded-full border border-gray-700 flex items-center text-gray-300">
+                <Award size={10} className="mr-1 text-yellow-500" /> {b}
+            </span>
+         ))}
+      </div>
 
       <div className="w-full space-y-4">
+        <button 
+            onClick={() => setIsGhostMode(!isGhostMode)}
+            className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
+                isGhostMode 
+                ? 'bg-neon-purple/20 border-neon-purple text-white' 
+                : 'bg-neon-card border-gray-700 hover:bg-gray-800 text-gray-400'
+            }`}
+        >
+            <span className="flex items-center"><Ghost size={18} className="mr-3" /> Ghost Mode</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded ${isGhostMode ? 'bg-neon-purple text-white' : 'bg-gray-800'}`}>
+                {isGhostMode ? 'ON' : 'OFF'}
+            </span>
+        </button>
+
         <button 
             onClick={handleInviteFriends}
             className="w-full bg-neon-card p-4 rounded-xl border border-gray-700 flex items-center justify-between hover:bg-gray-800 transition-colors"
@@ -459,13 +631,15 @@ const App: React.FC = () => {
             <span className="text-gray-400 text-sm">Share Link</span>
         </button>
 
-        <div className="bg-neon-card p-4 rounded-xl border border-gray-800 flex justify-between">
-           <span>Parties Attended</span>
-           <span className="font-bold text-neon-purple">0</span>
-        </div>
-        <div className="bg-neon-card p-4 rounded-xl border border-gray-800 flex justify-between">
-           <span>Avg Hype Rating</span>
-           <span className="font-bold text-neon-blue">5.0 🔥</span>
+        <div className="grid grid-cols-2 gap-4">
+            <div className="bg-neon-card p-4 rounded-xl border border-gray-800">
+                <span className="block text-gray-500 text-xs">Trust Score</span>
+                <span className="font-bold text-neon-green text-xl">98%</span>
+            </div>
+            <div className="bg-neon-card p-4 rounded-xl border border-gray-800">
+                <span className="block text-gray-500 text-xs">Vibe Rating</span>
+                <span className="font-bold text-neon-blue text-xl">4.9 🔥</span>
+            </div>
         </div>
 
         <button 
@@ -479,8 +653,18 @@ const App: React.FC = () => {
   );
 
   return (
-    <div className="bg-gray-900 h-screen w-screen overflow-hidden flex flex-col">
+    <div className={`bg-gray-900 h-screen w-screen overflow-hidden flex flex-col ${sosTriggered ? 'animate-pulse bg-red-900' : ''}`}>
       <NotificationSystem notifications={notifications} onDismiss={removeNotification} />
+      <SOSButton onTrigger={handleSOSTrigger} />
+
+      {showPaymentFor && (
+        <PaymentModal 
+            partyTitle={showPaymentFor.title} 
+            amount={showPaymentFor.entryFee || 0} 
+            onSuccess={handlePaymentSuccess} 
+            onCancel={() => setShowPaymentFor(null)} 
+        />
+      )}
 
       {/* Main Content Area */}
       <div className="flex-1 relative overflow-y-auto scrollbar-hide">
@@ -496,6 +680,7 @@ const App: React.FC = () => {
               onSendMessage={handleSendMessage}
               onRate={handleRate}
               onInvite={handleInviteFriends}
+              onHype={handleBoostHype}
             />
           ) : (
             <div className="flex flex-col items-center justify-center h-full text-gray-500">
