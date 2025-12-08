@@ -1,19 +1,26 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, Zap, Share2, Car, Flame, ShieldCheck } from 'lucide-react';
-import { Message, Party } from '../types';
+import { Send, Users, Shield, Zap, Share2, Car, Flame, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { Message, Party, ChatMode } from '../types';
 import { MusicPlayer } from './MusicPlayer';
 
 interface ChatInterfaceProps {
-  party: Party;
+  title: string;
+  subtitle?: string;
+  party?: Party; // Optional now, only for Party Mode
   messages: Message[];
+  mode: ChatMode;
   onSendMessage: (text: string) => void;
   onRate: (hype: number, safety: number) => void;
   onInvite: () => void;
   onHype: () => void;
+  onBack: () => void;
 }
 
-export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, onSendMessage, onRate, onInvite, onHype }) => {
+export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
+  title, subtitle, party, messages, mode, 
+  onSendMessage, onRate, onInvite, onHype, onBack 
+}) => {
   const [inputText, setInputText] = useState('');
   const [showRating, setShowRating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -33,6 +40,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
   };
 
   const handleGetRide = () => {
+     if (!party) return;
      // Center Nairobi Coordinates (Mock origin)
      const centerLat = -1.2921;
      const centerLng = 36.8219;
@@ -52,15 +60,18 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
   };
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowRating(true), 60000); // 1 minute demo delay
-    return () => clearTimeout(timer);
-  }, []);
+    // Only show vibe check in party mode
+    if (mode === 'party') {
+        const timer = setTimeout(() => setShowRating(true), 60000); // 1 minute demo delay
+        return () => clearTimeout(timer);
+    }
+  }, [mode]);
 
-  if (showRating) {
+  if (showRating && mode === 'party') {
     return (
       <div className="h-full flex flex-col items-center justify-center p-6 bg-neon-card animate-fadeIn">
         <h2 className="text-2xl font-bold text-white mb-2">Vibe Check! 🔥</h2>
-        <p className="text-gray-400 mb-8 text-center">How was {party.title}?</p>
+        <p className="text-gray-400 mb-8 text-center">How was {title}?</p>
         
         <div className="space-y-6 w-full max-w-xs">
           <div>
@@ -99,46 +110,60 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
       {/* Header */}
       <div className="p-4 bg-neon-card border-b border-gray-800 shadow-lg z-10">
         <div className="flex justify-between items-start mb-2">
-          <div>
-            <h2 className="font-bold text-white text-lg flex items-center">
-              {party.title} 
-              {(party.hostTrustScore || 0) > 80 && <ShieldCheck size={16} className="text-neon-blue ml-2" />}
-            </h2>
-            <div className="flex items-center text-xs text-neon-green">
-              <span className="w-2 h-2 bg-neon-green rounded-full mr-2 animate-pulse" />
-              Live Squad ({party.attendees} online)
+          <div className="flex items-center">
+            <button onClick={onBack} className="mr-3 p-1 hover:bg-white/10 rounded-full">
+                <ChevronLeft size={24} className="text-gray-300" />
+            </button>
+            <div>
+              <h2 className="font-bold text-white text-lg flex items-center">
+                {title} 
+                {mode === 'party' && party && (party.hostTrustScore || 0) > 80 && <ShieldCheck size={16} className="text-neon-blue ml-2" />}
+              </h2>
+              <div className="flex items-center text-xs text-neon-green">
+                {subtitle || (
+                    <>
+                        <span className="w-2 h-2 bg-neon-green rounded-full mr-2 animate-pulse" />
+                        Live
+                    </>
+                )}
+              </div>
             </div>
           </div>
-          <div className="flex space-x-2">
-            <button 
-                onClick={handleGetRide}
-                className="bg-gray-800 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
-                title="Get Me There (Uber)"
-            >
-                <Car size={20} />
-            </button>
-            <button 
-                onClick={onInvite}
-                className="bg-gray-800 p-2 rounded-full hover:bg-neon-blue hover:text-white transition-colors"
-                title="Invite Squad"
-            >
-                <Share2 size={20} className="text-gray-300" />
-            </button>
-          </div>
+          
+          {mode === 'party' && (
+            <div className="flex space-x-2">
+                <button 
+                    onClick={handleGetRide}
+                    className="bg-gray-800 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
+                    title="Get Me There (Uber)"
+                >
+                    <Car size={20} />
+                </button>
+                <button 
+                    onClick={onInvite}
+                    className="bg-gray-800 p-2 rounded-full hover:bg-neon-blue hover:text-white transition-colors"
+                    title="Invite Squad"
+                >
+                    <Share2 size={20} className="text-gray-300" />
+                </button>
+            </div>
+          )}
         </div>
         
-        {/* Hype Button */}
-        <button 
-            onClick={onHype}
-            className="w-full mt-2 bg-gradient-to-r from-orange-600 to-red-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center space-x-1 active:scale-95 transition-transform"
-        >
-            <Flame size={14} fill="currentColor" />
-            <span>BOOST VIBE ({party.hypeScore || 0})</span>
-        </button>
+        {/* Hype Button - Only in Party Mode */}
+        {mode === 'party' && (
+            <button 
+                onClick={onHype}
+                className="w-full mt-2 bg-gradient-to-r from-orange-600 to-red-600 text-white text-xs font-bold py-1.5 rounded flex items-center justify-center space-x-1 active:scale-95 transition-transform"
+            >
+                <Flame size={14} fill="currentColor" />
+                <span>BOOST VIBE ({party?.hypeScore || 0})</span>
+            </button>
+        )}
       </div>
 
-      {/* Music Player */}
-      {party.musicTrack && (
+      {/* Music Player - Only in Party Mode */}
+      {mode === 'party' && party?.musicTrack && (
          <div className="mt-2">
              <MusicPlayer track={party.musicTrack} />
          </div>
@@ -155,7 +180,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({ party, messages, o
                   ? 'bg-neon-purple text-white rounded-tr-none' 
                   : 'bg-gray-800 text-gray-200 rounded-tl-none'
               }`}>
-                {!isMe && <div className="text-[10px] text-gray-400 mb-1 font-bold">{msg.senderName}</div>}
+                {!isMe && mode === 'party' && <div className="text-[10px] text-gray-400 mb-1 font-bold">{msg.senderName}</div>}
                 {msg.text}
               </div>
             </div>

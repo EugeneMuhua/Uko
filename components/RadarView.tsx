@@ -12,6 +12,7 @@ interface RadarViewProps {
   currentUserAvatar?: string;
   isGhostMode: boolean;
   onToggleStatus: () => void;
+  onUserClick: (user: User) => void;
 }
 
 export const RadarView: React.FC<RadarViewProps> = ({ 
@@ -22,7 +23,8 @@ export const RadarView: React.FC<RadarViewProps> = ({
   currentUserStatus,
   currentUserAvatar,
   isGhostMode,
-  onToggleStatus
+  onToggleStatus,
+  onUserClick
 }) => {
   
   const getPosition = (x: number, y: number) => {
@@ -126,6 +128,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
             <div 
               key={u.id}
               style={pos}
+              onClick={() => onUserClick(u)}
               className="absolute z-20 transform -translate-x-1/2 -translate-y-1/2 flex flex-col items-center group cursor-pointer"
             >
               <div className={`w-8 h-8 rounded-full border-2 overflow-hidden transition-transform group-hover:scale-125 ${

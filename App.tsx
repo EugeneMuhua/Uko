@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award } from 'lucide-react';
+import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award, ArrowRight } from 'lucide-react';
 import { RadarView } from './components/RadarView';
 import { ChatInterface } from './components/ChatInterface';
 import { NotificationSystem } from './components/NotificationSystem';
@@ -11,7 +11,7 @@ import { generatePartyHype } from './services/geminiService';
 import { 
   MOCK_USERS, MOCK_PARTIES, CURRENT_USER_ID 
 } from './constants';
-import { User, Party, Message, Tab, UserStatus, VibeType, AppNotification, NotificationType } from './types';
+import { User, Party, Message, Tab, UserStatus, VibeType, AppNotification, NotificationType, ChatMode } from './types';
 
 const USER_STORAGE_KEY = 'uko_user_profile';
 
@@ -46,16 +46,21 @@ const App: React.FC = () => {
   const [isGhostMode, setIsGhostMode] = useState(false);
   const [showPaymentFor, setShowPaymentFor] = useState<Party | null>(null);
   const [sosTriggered, setSosTriggered] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<User | null>(null); // For User Modal
 
   // --- Invite Handling State ---
   const [pendingPartyId, setPendingPartyId] = useState<string | null>(null);
   const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
 
   // --- Active Chat State ---
-  const [activePartyId, setActivePartyId] = useState<string | null>(null);
+  const [activePartyId, setActivePartyId] = useState<string | null>(null); // Party I am technically "in"
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null); // Current open chat (Party ID or User ID)
+  const [activeChatMode, setActiveChatMode] = useState<ChatMode>('party');
+  
   const [messages, setMessages] = useState<Message[]>([
-    { id: 'm1', senderId: 'u3', senderName: 'Zuri', text: 'Where is everyone?', timestamp: new Date() },
-    { id: 'm2', senderId: 'u1', senderName: 'Juma', text: 'Just parked!', timestamp: new Date() }
+    { id: 'm1', conversationId: 'p1', senderId: 'u3', senderName: 'Zuri', text: 'Where is everyone?', timestamp: new Date() },
+    { id: 'm2', conversationId: 'p1', senderId: 'u1', senderName: 'Juma', text: 'Just parked!', timestamp: new Date() },
+    { id: 'm3', conversationId: 'u2', senderId: 'u2', senderName: 'Amani', text: 'Hey! Are you going to the party?', timestamp: new Date(Date.now() - 3600000) }
   ]);
 
   // --- Create Party State ---
@@ -182,7 +187,7 @@ const App: React.FC = () => {
       setParties(prev => [...prev, newSimParty]);
     }, 25000);
 
-    // Simulate a user (Amani) toggling Ghost Mode to show Radar Logic
+    // Simulate a user (Amani) toggling Ghost Mode
     const ghostTimer = setInterval(() => {
         setUsers(prev => prev.map(u => {
             if (u.id === 'u2') { // Amani
@@ -267,6 +272,8 @@ const App: React.FC = () => {
     };
     setParties([newParty, ...parties]);
     setActivePartyId(newParty.id);
+    setActiveConversationId(newParty.id);
+    setActiveChatMode('party');
     setActiveTab('chat');
     
     addNotification('Party Live! 📡', 'Your beacon has been broadcast to nearby users.', 'success');
@@ -291,6 +298,8 @@ const App: React.FC = () => {
 
   const enterParty = (partyId: string) => {
     setActivePartyId(partyId);
+    setActiveConversationId(partyId);
+    setActiveChatMode('party');
     setActiveTab('chat');
   };
 
@@ -303,9 +312,10 @@ const App: React.FC = () => {
   };
 
   const handleSendMessage = (text: string) => {
-    if (!userProfile) return;
+    if (!userProfile || !activeConversationId) return;
     const newMessage: Message = {
       id: `m${Date.now()}`,
+      conversationId: activeConversationId,
       senderId: CURRENT_USER_ID,
       senderName: userProfile.name,
       text,
@@ -336,7 +346,7 @@ const App: React.FC = () => {
     let shareTitle = 'Join me on Uko?';
     let shareText = 'Check out this app!';
     
-    if (activePartyId) {
+    if (activePartyId && activeChatMode === 'party') {
         shareUrl += `?partyId=${activePartyId}&invitedBy=${encodeURIComponent(userProfile.name)}`;
         const party = parties.find(p => p.id === activePartyId);
         shareTitle = `Join ${party?.title || 'the party'} on Uko?`;
@@ -367,6 +377,24 @@ const App: React.FC = () => {
       setTimeout(() => setSosTriggered(false), 5000); // Reset for demo
   };
 
+  const handleUserClick = (user: User) => {
+      setSelectedUser(user);
+  };
+
+  const handleStartDM = () => {
+      if (selectedUser) {
+          setActiveConversationId(selectedUser.id);
+          setActiveChatMode('dm');
+          setActiveTab('chat');
+          setSelectedUser(null);
+      }
+  };
+
+  const handleInboxSelect = (id: string, mode: ChatMode) => {
+      setActiveConversationId(id);
+      setActiveChatMode(mode);
+  };
+
   // --- Render Views ---
 
   if (!userProfile) {
@@ -383,6 +411,7 @@ const App: React.FC = () => {
       currentUserAvatar={userProfile.avatar}
       isGhostMode={isGhostMode}
       onToggleStatus={handleToggleStatus}
+      onUserClick={handleUserClick}
     />
   );
 
@@ -652,10 +681,123 @@ const App: React.FC = () => {
     </div>
   );
 
+  const renderInbox = () => {
+    // Group messages by conversationId to find recent chats
+    // Unique IDs that are NOT the active party ID (if any)
+    const uniqueThreads = Array.from(new Set(messages.map(m => m.conversationId))).filter(id => id !== undefined);
+    
+    // Find DM threads (users)
+    const dmThreads = uniqueThreads
+        .filter(id => id !== activePartyId && !id?.startsWith('p')) // Assume 'p' is party, or just look up in users
+        .map(id => users.find(u => u.id === id))
+        .filter((u): u is User => !!u);
+
+    return (
+        <div className="p-4 bg-gray-900 min-h-screen space-y-4">
+            <h2 className="text-2xl font-bold text-white mb-6">Messages</h2>
+            
+            {/* Active Party Card */}
+            {activePartyId && (
+                <div onClick={() => { setActiveConversationId(activePartyId); setActiveChatMode('party'); }} className="bg-gradient-to-r from-neon-purple/20 to-neon-blue/20 border border-neon-purple/50 rounded-xl p-4 flex items-center space-x-4 cursor-pointer hover:bg-white/5 transition-colors">
+                     <div className="w-12 h-12 rounded-full bg-neon-purple flex items-center justify-center">
+                         <MessageCircle className="text-white" />
+                     </div>
+                     <div className="flex-1">
+                         <h3 className="font-bold text-white">Active Squad</h3>
+                         <p className="text-xs text-neon-green flex items-center"><span className="w-2 h-2 rounded-full bg-neon-green mr-1 animate-pulse"/> Live Chat</p>
+                     </div>
+                     <ArrowRight size={20} className="text-gray-400" />
+                </div>
+            )}
+
+            <h3 className="text-sm font-bold text-gray-500 mt-6 uppercase tracking-wider">Direct Messages</h3>
+            <div className="space-y-2">
+                {dmThreads.length === 0 ? (
+                    <p className="text-gray-600 text-sm italic">No recent messages. Tap a user on the radar to chat!</p>
+                ) : (
+                    dmThreads.map(user => (
+                        <div key={user.id} onClick={() => handleInboxSelect(user.id, 'dm')} className="bg-neon-card border border-gray-800 rounded-xl p-3 flex items-center space-x-3 cursor-pointer hover:border-neon-blue transition-colors">
+                            <div className="relative">
+                                <img src={user.avatar} className="w-10 h-10 rounded-full object-cover" alt={user.name} />
+                                <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black ${user.status === UserStatus.READY ? 'bg-neon-green' : 'bg-gray-500'}`} />
+                            </div>
+                            <div className="flex-1">
+                                <h4 className="font-bold text-white text-sm">{user.name}</h4>
+                                <p className="text-xs text-gray-400 truncate">Tap to chat</p>
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
+        </div>
+    );
+  };
+
+  const renderChat = () => {
+      // If no conversation selected, show inbox
+      if (!activeConversationId) {
+          return renderInbox();
+      }
+
+      // Determine Chat Props
+      let title = "Chat";
+      let subtitle = "";
+      let partyData: Party | undefined;
+
+      if (activeChatMode === 'party') {
+          partyData = parties.find(p => p.id === activeConversationId);
+          title = partyData?.title || "Party Chat";
+          subtitle = `${partyData?.attendees || 0} online`;
+      } else {
+          const user = users.find(u => u.id === activeConversationId);
+          title = user?.name || "Unknown";
+          subtitle = user?.status || "Offline";
+      }
+
+      const relevantMessages = messages.filter(m => m.conversationId === activeConversationId);
+
+      return (
+        <ChatInterface 
+            title={title}
+            subtitle={subtitle}
+            party={partyData}
+            messages={relevantMessages}
+            mode={activeChatMode}
+            onSendMessage={handleSendMessage}
+            onRate={handleRate}
+            onInvite={handleInviteFriends}
+            onHype={handleBoostHype}
+            onBack={() => setActiveConversationId(null)}
+        />
+      );
+  };
+
   return (
     <div className={`bg-gray-900 h-screen w-screen overflow-hidden flex flex-col ${sosTriggered ? 'animate-pulse bg-red-900' : ''}`}>
       <NotificationSystem notifications={notifications} onDismiss={removeNotification} />
       <SOSButton onTrigger={handleSOSTrigger} />
+
+      {/* User Interaction Modal */}
+      {selectedUser && (
+          <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setSelectedUser(null)}>
+              <div className="bg-neon-card border border-white/10 w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100" onClick={e => e.stopPropagation()}>
+                  <div className="w-20 h-20 rounded-full border-2 border-neon-blue mx-auto mb-4 p-1">
+                      <img src={selectedUser.avatar} className="w-full h-full rounded-full object-cover" />
+                  </div>
+                  <h3 className="text-xl font-bold text-white mb-1">{selectedUser.name}</h3>
+                  <p className="text-neon-blue text-sm mb-6">{selectedUser.status}</p>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                      <button onClick={handleStartDM} className="bg-neon-purple hover:bg-purple-600 text-white font-bold py-3 rounded-xl flex items-center justify-center">
+                          <MessageCircle size={18} className="mr-2" /> Message
+                      </button>
+                      <button onClick={() => setSelectedUser(null)} className="bg-gray-800 hover:bg-gray-700 text-white font-bold py-3 rounded-xl">
+                          Close
+                      </button>
+                  </div>
+              </div>
+          </div>
+      )}
 
       {showPaymentFor && (
         <PaymentModal 
@@ -672,29 +814,7 @@ const App: React.FC = () => {
         {activeTab === 'discover' && renderDiscover()}
         {activeTab === 'create' && renderCreate()}
         {activeTab === 'profile' && renderProfile()}
-        {activeTab === 'chat' && (
-          activePartyId ? (
-            <ChatInterface 
-              party={parties.find(p => p.id === activePartyId) || parties[0]}
-              messages={messages}
-              onSendMessage={handleSendMessage}
-              onRate={handleRate}
-              onInvite={handleInviteFriends}
-              onHype={handleBoostHype}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full text-gray-500">
-              <MessageCircle size={48} className="mb-4 opacity-50" />
-              <p>Join a party to enter the squad chat.</p>
-              <button 
-                onClick={() => setActiveTab('discover')}
-                className="mt-4 text-neon-purple hover:underline"
-              >
-                Find a party
-              </button>
-            </div>
-          )
-        )}
+        {activeTab === 'chat' && renderChat()}
       </div>
 
       {/* Bottom Navigation */}
@@ -714,7 +834,7 @@ const App: React.FC = () => {
         </button>
         <button onClick={() => setActiveTab('chat')} className={`flex flex-col items-center p-2 ${activeTab === 'chat' ? 'text-neon-green' : 'text-gray-500'}`}>
           <MessageCircle size={24} className={activeTab === 'chat' ? 'drop-shadow-[0_0_5px_#39ff14]' : ''} />
-          <span className="text-[10px] mt-1">Squad</span>
+          <span className="text-[10px] mt-1">{activeConversationId ? 'Chat' : 'Inbox'}</span>
         </button>
         <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center p-2 ${activeTab === 'profile' ? 'text-white' : 'text-gray-500'}`}>
           <UserIcon size={24} />

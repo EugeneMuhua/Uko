@@ -52,8 +52,11 @@ export interface Party {
   musicTrack?: MusicTrack;
 }
 
+export type ChatMode = 'party' | 'dm';
+
 export interface Message {
   id: string;
+  conversationId: string; // ID of the party or the User ID of the other person
   senderId: string;
   senderName: string;
   text: string;
