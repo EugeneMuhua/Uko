@@ -11,8 +11,10 @@ interface RadarViewProps {
   currentUserStatus: UserStatus;
   currentUserAvatar?: string;
   isGhostMode: boolean;
+  isDarkMode?: boolean;
   onToggleStatus: () => void;
   onUserClick: (user: User) => void;
+  onPartyClick: (party: Party) => void;
 }
 
 export const RadarView: React.FC<RadarViewProps> = ({ 
@@ -23,8 +25,10 @@ export const RadarView: React.FC<RadarViewProps> = ({
   currentUserStatus,
   currentUserAvatar,
   isGhostMode,
+  isDarkMode = true,
   onToggleStatus,
-  onUserClick
+  onUserClick,
+  onPartyClick
 }) => {
   
   const getPosition = (x: number, y: number) => {
@@ -55,8 +59,15 @@ export const RadarView: React.FC<RadarViewProps> = ({
     }
   };
 
+  const theme = {
+      bg: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
+      text: isDarkMode ? 'text-gray-400' : 'text-gray-500',
+      ring: isDarkMode ? 'border-neon-purple/20' : 'border-neon-purple/10',
+      scanner: isDarkMode ? 'from-neon-purple/40' : 'from-neon-purple/20',
+  }
+
   return (
-    <div className="flex flex-col h-full w-full relative overflow-hidden bg-gray-900">
+    <div className={`flex flex-col h-full w-full relative overflow-hidden ${theme.bg} transition-colors duration-300`}>
       {/* Top Controls */}
       <div className="absolute top-4 left-0 right-0 z-10 px-4 flex justify-between items-center">
         <div className="bg-black/60 backdrop-blur-md rounded-full p-1 flex space-x-1 border border-white/10">
@@ -80,7 +91,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
               ? 'border-neon-green text-neon-green bg-neon-green/10 shadow-[0_0_10px_#39ff1440]'
               : currentUserStatus === UserStatus.CHILLING
               ? 'border-neon-blue text-neon-blue bg-neon-blue/10'
-              : 'border-white/30 text-gray-300'
+              : 'border-white/30 text-gray-300 bg-black/40'
           }`}
         >
           <span className={`w-2 h-2 rounded-full ${
@@ -100,12 +111,12 @@ export const RadarView: React.FC<RadarViewProps> = ({
 
       {/* The Radar Scanner */}
       <div className="flex-1 relative flex items-center justify-center mt-8">
-        <div className="absolute w-[80vw] h-[80vw] border border-neon-purple/20 rounded-full" />
-        <div className="absolute w-[50vw] h-[50vw] border border-neon-purple/20 rounded-full" />
-        <div className="absolute w-[20vw] h-[20vw] border border-neon-purple/20 rounded-full bg-neon-purple/5" />
+        <div className={`absolute w-[80vw] h-[80vw] border ${theme.ring} rounded-full transition-colors`} />
+        <div className={`absolute w-[50vw] h-[50vw] border ${theme.ring} rounded-full transition-colors`} />
+        <div className={`absolute w-[20vw] h-[20vw] border ${theme.ring} rounded-full bg-neon-purple/5 transition-colors`} />
         
         <div className="absolute w-[80vw] h-[80vw] rounded-full overflow-hidden opacity-30 pointer-events-none">
-           <div className="w-full h-1/2 bg-gradient-to-t from-neon-purple/40 to-transparent origin-bottom animate-spin-slow absolute top-0 left-0" />
+           <div className={`w-full h-1/2 bg-gradient-to-t ${theme.scanner} to-transparent origin-bottom animate-spin-slow absolute top-0 left-0 transition-colors`} />
         </div>
 
         {/* Center (You) */}
@@ -154,6 +165,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
              <div 
                key={p.id}
                style={pos}
+               onClick={() => onPartyClick(p)}
                className="absolute z-10 transform -translate-x-1/2 -translate-y-1/2 group cursor-pointer"
              >
                {/* Hype Ripple */}
@@ -172,7 +184,7 @@ export const RadarView: React.FC<RadarViewProps> = ({
         })}
       </div>
       
-      <div className="p-4 text-center text-gray-500 text-xs pb-24">
+      <div className={`p-4 text-center ${theme.text} text-xs pb-24 transition-colors`}>
         Scanning area... {users.filter(u => u.distance <= radius && !u.isGhost).length} active nearby
       </div>
     </div>

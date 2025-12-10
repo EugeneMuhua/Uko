@@ -1,12 +1,14 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award, ArrowRight } from 'lucide-react';
+import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award, ArrowRight, Wine, Sun, Moon } from 'lucide-react';
 import { RadarView } from './components/RadarView';
 import { ChatInterface } from './components/ChatInterface';
 import { NotificationSystem } from './components/NotificationSystem';
 import { Onboarding } from './components/Onboarding';
 import { SOSButton } from './components/SOSButton';
 import { PaymentModal } from './components/PaymentModal';
+import { InviteModal } from './components/InviteModal';
+import { TableBookingModal } from './components/TableBookingModal';
 import { generatePartyHype } from './services/geminiService';
 import { 
   MOCK_USERS, MOCK_PARTIES, CURRENT_USER_ID 
@@ -14,6 +16,7 @@ import {
 import { User, Party, Message, Tab, UserStatus, VibeType, AppNotification, NotificationType, ChatMode } from './types';
 
 const USER_STORAGE_KEY = 'uko_user_profile';
+const THEME_STORAGE_KEY = 'uko_theme_pref';
 
 interface UserProfile {
   name: string;
@@ -42,15 +45,24 @@ const App: React.FC = () => {
   const [radarRadius, setRadarRadius] = useState(5); // km
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   
+  // --- Theme State ---
+  const [isDarkMode, setIsDarkMode] = useState(() => {
+    const saved = localStorage.getItem(THEME_STORAGE_KEY);
+    return saved ? saved === 'dark' : true;
+  });
+
   // --- New Feature State ---
   const [isGhostMode, setIsGhostMode] = useState(false);
   const [showPaymentFor, setShowPaymentFor] = useState<Party | null>(null);
+  const [showTableBookingFor, setShowTableBookingFor] = useState<Party | null>(null);
   const [sosTriggered, setSosTriggered] = useState(false);
   const [selectedUser, setSelectedUser] = useState<User | null>(null); // For User Modal
 
   // --- Invite Handling State ---
   const [pendingPartyId, setPendingPartyId] = useState<string | null>(null);
   const [invitingUserId, setInvitingUserId] = useState<string | null>(null);
+  const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inviteLinkData, setInviteLinkData] = useState({ url: '', title: '' });
 
   // --- Active Chat State ---
   const [activePartyId, setActivePartyId] = useState<string | null>(null); // Party I am technically "in"
@@ -74,8 +86,26 @@ const App: React.FC = () => {
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // --- Helper Classes based on Theme ---
+  const theme = {
+    bg: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
+    text: isDarkMode ? 'text-white' : 'text-gray-900',
+    textMuted: isDarkMode ? 'text-gray-400' : 'text-gray-500',
+    card: isDarkMode ? 'bg-neon-card border-gray-800' : 'bg-white border-gray-200 shadow-sm',
+    cardHover: isDarkMode ? 'hover:bg-white/5' : 'hover:bg-gray-50',
+    input: isDarkMode ? 'bg-gray-800 border-gray-700 text-white' : 'bg-white border-gray-300 text-gray-900',
+    nav: isDarkMode ? 'bg-black/90 border-white/10' : 'bg-white/90 border-gray-200 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]',
+    tabInactive: isDarkMode ? 'text-gray-500' : 'text-gray-400',
+  };
+
   // --- Initialization Effects ---
   
+  useEffect(() => {
+    // Theme Body Effect
+    document.body.style.backgroundColor = isDarkMode ? '#0f0f13' : '#f9fafb';
+    localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
+  }, [isDarkMode]);
+
   useEffect(() => {
     const savedUser = localStorage.getItem(USER_STORAGE_KEY);
     if (savedUser) {
@@ -311,6 +341,18 @@ const App: React.FC = () => {
     }
   };
 
+  const handleBookTable = () => {
+    if (activePartyId) {
+      const party = parties.find(p => p.id === activePartyId);
+      if (party) setShowTableBookingFor(party);
+    }
+  };
+
+  const handleBookTableConfirm = (details: any) => {
+    setShowTableBookingFor(null);
+    addNotification('Reservation Confirmed', `Table and drinks booked! Cost shared with ${details.splitCount} people.`, 'success');
+  };
+
   const handleSendMessage = (text: string) => {
     if (!userProfile || !activeConversationId) return;
     const newMessage: Message = {
@@ -339,30 +381,23 @@ const App: React.FC = () => {
     }
   };
 
-  const handleInviteFriends = async () => {
+  const handleInviteFriends = () => {
     if (!userProfile) return;
     const baseUrl = window.location.origin + window.location.pathname;
     let shareUrl = baseUrl;
     let shareTitle = 'Join me on Uko?';
-    let shareText = 'Check out this app!';
     
     if (activePartyId && activeChatMode === 'party') {
         shareUrl += `?partyId=${activePartyId}&invitedBy=${encodeURIComponent(userProfile.name)}`;
         const party = parties.find(p => p.id === activePartyId);
         shareTitle = `Join ${party?.title || 'the party'} on Uko?`;
-        shareText = `I'm at ${party?.title}. Hop in the squad chat!`;
     } else {
         shareUrl += `?invitedBy=${encodeURIComponent(userProfile.name)}`;
-        shareText = `Add me on Uko? - The Nightlife Radar.`;
+        shareTitle = `Add me on Uko? - The Nightlife Radar`;
     }
 
-    const shareData = { title: shareTitle, text: shareText, url: shareUrl };
-
-    if (navigator.share) {
-        try { await navigator.share(shareData); addNotification('Invite Sent', 'Your squad has been summoned.', 'success'); } catch (err) {}
-    } else {
-        try { await navigator.clipboard.writeText(shareUrl); addNotification('Link Copied', 'Share the link with your friends!', 'info'); } catch (err) { addNotification('Error', 'Could not copy link.', 'alert'); }
-    }
+    setInviteLinkData({ url: shareUrl, title: shareTitle });
+    setShowInviteModal(true);
   };
 
   const handleRate = (hype: number, safety: number) => {
@@ -410,16 +445,18 @@ const App: React.FC = () => {
       currentUserStatus={myStatus}
       currentUserAvatar={userProfile.avatar}
       isGhostMode={isGhostMode}
+      isDarkMode={isDarkMode}
       onToggleStatus={handleToggleStatus}
       onUserClick={handleUserClick}
+      onPartyClick={handleJoinParty}
     />
   );
 
   const renderDiscover = () => (
-    <div className="p-4 pb-24 space-y-4 bg-gray-900 min-h-screen">
-      <h2 className="text-2xl font-bold text-white mb-4">Nearby Parties</h2>
+    <div className={`p-4 pb-24 space-y-4 ${theme.bg} min-h-screen transition-colors duration-300`}>
+      <h2 className={`text-2xl font-bold ${theme.text} mb-4`}>Nearby Parties</h2>
       {parties.sort((a,b) => a.distance - b.distance).map(party => (
-        <div key={party.id} className="bg-neon-card rounded-xl overflow-hidden shadow-lg border border-gray-800 relative">
+        <div key={party.id} className={`${theme.card} rounded-xl overflow-hidden border relative transition-colors`}>
           <div className="h-32 bg-cover bg-center relative" style={{ backgroundImage: `url(${party.coverImage})` }}>
             <div className="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs text-white font-bold">
               {party.distance}km away
@@ -438,25 +475,33 @@ const App: React.FC = () => {
             </div>
           </div>
           <div className="p-4">
-            <h3 className="text-lg font-bold text-white flex justify-between">
+            <h3 className={`text-lg font-bold ${theme.text} flex justify-between`}>
                 {party.title}
                 {(party.hypeScore || 0) > 50 && <span className="text-xs text-orange-500 flex items-center"><Flame size={12}/> Trending</span>}
             </h3>
-            <p className="text-gray-400 text-sm mt-1">{party.description}</p>
+            <p className={`${theme.textMuted} text-sm mt-1`}>{party.description}</p>
             <div className="flex justify-between items-center mt-4">
-              <div className="text-xs text-gray-500">
+              <div className={`text-xs ${theme.textMuted}`}>
                 {party.attendees}/{party.capacity} joined
               </div>
-              <button 
-                onClick={() => handleJoinParty(party)}
-                className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-[0_0_10px_#b026ff40] ${
-                  party.entryFee && party.entryFee > 0 
-                  ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/50' 
-                  : 'bg-neon-purple text-white hover:bg-purple-600'
-                }`}
-              >
-                {party.entryFee && party.entryFee > 0 ? 'Buy Ticket' : 'Join Squad'}
-              </button>
+              <div className="flex space-x-2">
+                  <button 
+                    onClick={() => setShowTableBookingFor(party)}
+                    className="px-3 py-2 rounded-lg text-sm font-bold transition-colors bg-gray-800 text-neon-purple border border-neon-purple/30 hover:bg-neon-purple hover:text-white"
+                  >
+                    <Wine size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleJoinParty(party)}
+                    className={`px-4 py-2 rounded-lg text-sm font-bold transition-colors shadow-[0_0_10px_#b026ff40] ${
+                      party.entryFee && party.entryFee > 0 
+                      ? 'bg-green-600 hover:bg-green-700 text-white shadow-green-900/50' 
+                      : 'bg-neon-purple text-white hover:bg-purple-600'
+                    }`}
+                  >
+                    {party.entryFee && party.entryFee > 0 ? 'Buy Ticket' : 'Join Squad'}
+                  </button>
+              </div>
             </div>
           </div>
         </div>
@@ -465,14 +510,14 @@ const App: React.FC = () => {
   );
 
   const renderCreate = () => (
-    <div className="p-6 bg-gray-900 min-h-screen flex flex-col pb-24">
-      <h2 className="text-2xl font-bold text-white mb-6">Drop a Pin</h2>
+    <div className={`p-6 ${theme.bg} min-h-screen flex flex-col pb-24 transition-colors duration-300`}>
+      <h2 className={`text-2xl font-bold ${theme.text} mb-6`}>Drop a Pin</h2>
       
       <div className="space-y-6">
         <div>
-          <label className="block text-gray-400 text-sm mb-2">Event Title</label>
+          <label className={`block ${theme.textMuted} text-sm mb-2`}>Event Title</label>
           <input 
-            className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-neon-purple focus:outline-none"
+            className={`w-full ${theme.input} rounded-lg p-3 focus:border-neon-purple focus:outline-none`}
             placeholder="e.g. Saturday Night Rager"
             value={newPartyTitle}
             onChange={(e) => setNewPartyTitle(e.target.value)}
@@ -480,10 +525,10 @@ const App: React.FC = () => {
         </div>
 
         <div>
-            <label className="block text-gray-400 text-sm mb-2">Entry Fee (KES)</label>
+            <label className={`block ${theme.textMuted} text-sm mb-2`}>Entry Fee (KES)</label>
             <input 
                 type="number"
-                className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-green-500 focus:outline-none"
+                className={`w-full ${theme.input} rounded-lg p-3 focus:border-green-500 focus:outline-none`}
                 placeholder="0 for Free"
                 value={newPartyEntryFee || ''}
                 onChange={(e) => setNewPartyEntryFee(Number(e.target.value))}
@@ -491,7 +536,7 @@ const App: React.FC = () => {
         </div>
 
         <div>
-          <label className="block text-gray-400 text-sm mb-2">The Vibe</label>
+          <label className={`block ${theme.textMuted} text-sm mb-2`}>The Vibe</label>
           <div className="grid grid-cols-3 gap-2 mb-2">
             {!isCustomVibe && Object.values(VibeType).map((vibe) => (
               <button
@@ -500,7 +545,7 @@ const App: React.FC = () => {
                 className={`p-2 rounded-lg text-xs font-bold border transition-all ${
                   newPartyVibe === vibe 
                     ? 'border-neon-purple bg-neon-purple/20 text-white' 
-                    : 'border-gray-700 text-gray-500'
+                    : `${isDarkMode ? 'border-gray-700 text-gray-500' : 'border-gray-300 text-gray-500'}`
                 }`}
               >
                 {vibe}
@@ -511,7 +556,7 @@ const App: React.FC = () => {
                 className={`p-2 rounded-lg text-xs font-bold border transition-all ${
                   isCustomVibe 
                     ? 'border-neon-purple bg-neon-purple/20 text-white col-span-3' 
-                    : 'border-gray-700 text-gray-500 border-dashed hover:border-neon-blue hover:text-neon-blue'
+                    : `${isDarkMode ? 'border-gray-700 text-gray-500' : 'border-gray-300 text-gray-500'} border-dashed hover:border-neon-blue hover:text-neon-blue`
                 }`}
               >
                 {isCustomVibe ? 'Cancel' : '+ Custom'}
@@ -519,7 +564,7 @@ const App: React.FC = () => {
           </div>
           {isCustomVibe && (
               <input 
-                className="w-full bg-gray-800 border border-neon-purple rounded-lg p-3 text-white focus:outline-none animate-fadeIn"
+                className={`w-full ${theme.input} border-neon-purple rounded-lg p-3 focus:outline-none animate-fadeIn`}
                 placeholder="e.g. 80s Disco..."
                 value={newPartyVibe}
                 onChange={(e) => setNewPartyVibe(e.target.value)}
@@ -530,14 +575,14 @@ const App: React.FC = () => {
 
         <div>
             <div className="flex justify-between items-end mb-2">
-                <label className="block text-gray-400 text-sm">Pin Icon</label>
+                <label className={`block ${theme.textMuted} text-sm`}>Pin Icon</label>
                 <input type="file" ref={fileInputRef} onChange={handleIconUpload} accept="image/*" className="hidden" />
             </div>
             
             <div className="flex space-x-3 overflow-x-auto pb-2 scrollbar-hide">
                 <button
                     onClick={() => fileInputRef.current?.click()}
-                    className={`flex flex-col items-center justify-center flex-shrink-0 p-2 w-14 h-14 rounded-lg border border-dashed border-gray-600 text-gray-500 hover:border-neon-blue hover:text-neon-blue transition-colors`}
+                    className={`flex flex-col items-center justify-center flex-shrink-0 p-2 w-14 h-14 rounded-lg border border-dashed ${isDarkMode ? 'border-gray-600 text-gray-500' : 'border-gray-400 text-gray-500'} hover:border-neon-blue hover:text-neon-blue transition-colors`}
                 >
                     <Upload size={20} />
                     <span className="text-[9px] mt-1">Upload</span>
@@ -551,7 +596,9 @@ const App: React.FC = () => {
                     key={iconItem.id}
                     onClick={() => setNewPartyIcon(iconItem.id)}
                     className={`flex flex-col items-center flex-shrink-0 p-2 rounded-lg border transition-all w-14 ${
-                        isSelected ? 'border-neon-blue bg-neon-blue/20 text-white shadow-[0_0_10px_#04d9ff40]' : 'border-gray-700 text-gray-500'
+                        isSelected 
+                          ? 'border-neon-blue bg-neon-blue/20 text-white shadow-[0_0_10px_#04d9ff40]' 
+                          : `${isDarkMode ? 'border-gray-700 text-gray-500' : 'border-gray-300 text-gray-500'}`
                     }`}
                     >
                     <IconComp size={24} className="mb-1" />
@@ -563,9 +610,9 @@ const App: React.FC = () => {
         </div>
 
         <div>
-            <label className="block text-gray-400 text-sm mb-2">Set Exact Location (Tap)</label>
+            <label className={`block ${theme.textMuted} text-sm mb-2`}>Set Exact Location (Tap)</label>
             <div 
-                className="w-full aspect-square bg-gray-800 rounded-xl border border-gray-700 relative overflow-hidden cursor-crosshair group shadow-inner"
+                className={`w-full aspect-square ${isDarkMode ? 'bg-gray-800' : 'bg-gray-100'} rounded-xl border ${isDarkMode ? 'border-gray-700' : 'border-gray-300'} relative overflow-hidden cursor-crosshair group shadow-inner`}
                 onClick={handleLocationSelect}
             >
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
@@ -586,18 +633,18 @@ const App: React.FC = () => {
 
         <div>
           <div className="flex justify-between items-center mb-2">
-             <label className="text-gray-400 text-sm">Description</label>
+             <label className={`${theme.textMuted} text-sm`}>Description</label>
              <button 
                onClick={handleGenerateAI}
                disabled={isGeneratingAI || !newPartyTitle}
-               className="text-xs text-neon-blue flex items-center hover:text-white disabled:opacity-50"
+               className="text-xs text-neon-blue flex items-center hover:text-neon-purple disabled:opacity-50"
              >
                <Sparkles size={12} className="mr-1" /> AI Hype Me
              </button>
           </div>
           <div className="relative">
             <textarea 
-              className="w-full bg-gray-800 border border-gray-700 rounded-lg p-3 text-white focus:border-neon-purple focus:outline-none h-24"
+              className={`w-full ${theme.input} rounded-lg p-3 focus:border-neon-purple focus:outline-none h-24`}
               placeholder="What's the plan?"
               value={newPartyDesc}
               onChange={(e) => setNewPartyDesc(e.target.value)}
@@ -621,7 +668,7 @@ const App: React.FC = () => {
   );
 
   const renderProfile = () => (
-    <div className="p-6 bg-gray-900 min-h-screen flex flex-col items-center pt-12 text-white">
+    <div className={`p-6 ${theme.bg} min-h-screen flex flex-col items-center pt-12 ${theme.text} transition-colors duration-300`}>
       <div className="w-24 h-24 rounded-full border-4 border-neon-purple p-1 mb-4 shadow-[0_0_20px_#b026ff]">
         <img src={userProfile.avatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
       </div>
@@ -631,19 +678,37 @@ const App: React.FC = () => {
       {/* Badges */}
       <div className="flex space-x-2 mb-8">
          {['Night Owl', 'Verified', 'Safe Host'].map(b => (
-            <span key={b} className="bg-gray-800 text-xs px-2 py-1 rounded-full border border-gray-700 flex items-center text-gray-300">
+            <span key={b} className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-sm'} text-xs px-2 py-1 rounded-full border flex items-center ${theme.textMuted}`}>
                 <Award size={10} className="mr-1 text-yellow-500" /> {b}
             </span>
          ))}
       </div>
 
       <div className="w-full space-y-4">
+        {/* Toggle Theme */}
+        <button 
+            onClick={() => setIsDarkMode(!isDarkMode)}
+            className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
+                isDarkMode 
+                ? 'bg-neon-card border-gray-700 hover:bg-gray-800' 
+                : 'bg-white border-gray-200 hover:bg-gray-50'
+            }`}
+        >
+            <span className="flex items-center">
+                {isDarkMode ? <Moon size={18} className="mr-3" /> : <Sun size={18} className="mr-3 text-orange-500" />} 
+                Appearance
+            </span>
+            <span className={`text-xs font-bold px-2 py-1 rounded opacity-70`}>
+                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+            </span>
+        </button>
+
         <button 
             onClick={() => setIsGhostMode(!isGhostMode)}
             className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
                 isGhostMode 
-                ? 'bg-neon-purple/20 border-neon-purple text-white' 
-                : 'bg-neon-card border-gray-700 hover:bg-gray-800 text-gray-400'
+                ? 'bg-neon-purple/20 border-neon-purple' 
+                : `${isDarkMode ? 'bg-neon-card border-gray-700 hover:bg-gray-800' : 'bg-white border-gray-200 hover:bg-gray-50'} ${theme.textMuted}`
             }`}
         >
             <span className="flex items-center"><Ghost size={18} className="mr-3" /> Ghost Mode</span>
@@ -654,19 +719,19 @@ const App: React.FC = () => {
 
         <button 
             onClick={handleInviteFriends}
-            className="w-full bg-neon-card p-4 rounded-xl border border-gray-700 flex items-center justify-between hover:bg-gray-800 transition-colors"
+            className={`w-full ${theme.card} p-4 rounded-xl border flex items-center justify-between ${theme.cardHover} transition-colors`}
         >
             <span className="flex items-center"><Navigation size={18} className="mr-3 text-neon-blue" /> Invite Squad</span>
-            <span className="text-gray-400 text-sm">Share Link</span>
+            <span className={`${theme.textMuted} text-sm`}>Share Link</span>
         </button>
 
         <div className="grid grid-cols-2 gap-4">
-            <div className="bg-neon-card p-4 rounded-xl border border-gray-800">
-                <span className="block text-gray-500 text-xs">Trust Score</span>
+            <div className={`${theme.card} p-4 rounded-xl border`}>
+                <span className={`block ${theme.textMuted} text-xs`}>Trust Score</span>
                 <span className="font-bold text-neon-green text-xl">98%</span>
             </div>
-            <div className="bg-neon-card p-4 rounded-xl border border-gray-800">
-                <span className="block text-gray-500 text-xs">Vibe Rating</span>
+            <div className={`${theme.card} p-4 rounded-xl border`}>
+                <span className={`block ${theme.textMuted} text-xs`}>Vibe Rating</span>
                 <span className="font-bold text-neon-blue text-xl">4.9 🔥</span>
             </div>
         </div>
@@ -683,18 +748,16 @@ const App: React.FC = () => {
 
   const renderInbox = () => {
     // Group messages by conversationId to find recent chats
-    // Unique IDs that are NOT the active party ID (if any)
-    const uniqueThreads = Array.from(new Set(messages.map(m => m.conversationId))).filter(id => id !== undefined);
+    const uniqueThreads: string[] = Array.from(new Set(messages.map(m => m.conversationId)));
     
-    // Find DM threads (users)
     const dmThreads = uniqueThreads
-        .filter(id => id !== activePartyId && !id?.startsWith('p')) // Assume 'p' is party, or just look up in users
+        .filter(id => id !== activePartyId && !id.startsWith('p')) 
         .map(id => users.find(u => u.id === id))
         .filter((u): u is User => !!u);
 
     return (
-        <div className="p-4 bg-gray-900 min-h-screen space-y-4">
-            <h2 className="text-2xl font-bold text-white mb-6">Messages</h2>
+        <div className={`p-4 ${theme.bg} min-h-screen space-y-4 transition-colors duration-300`}>
+            <h2 className={`text-2xl font-bold ${theme.text} mb-6`}>Messages</h2>
             
             {/* Active Party Card */}
             {activePartyId && (
@@ -703,27 +766,27 @@ const App: React.FC = () => {
                          <MessageCircle className="text-white" />
                      </div>
                      <div className="flex-1">
-                         <h3 className="font-bold text-white">Active Squad</h3>
+                         <h3 className={`font-bold ${theme.text}`}>Active Squad</h3>
                          <p className="text-xs text-neon-green flex items-center"><span className="w-2 h-2 rounded-full bg-neon-green mr-1 animate-pulse"/> Live Chat</p>
                      </div>
                      <ArrowRight size={20} className="text-gray-400" />
                 </div>
             )}
 
-            <h3 className="text-sm font-bold text-gray-500 mt-6 uppercase tracking-wider">Direct Messages</h3>
+            <h3 className={`text-sm font-bold ${theme.textMuted} mt-6 uppercase tracking-wider`}>Direct Messages</h3>
             <div className="space-y-2">
                 {dmThreads.length === 0 ? (
-                    <p className="text-gray-600 text-sm italic">No recent messages. Tap a user on the radar to chat!</p>
+                    <p className={`${theme.textMuted} text-sm italic`}>No recent messages. Tap a user on the radar to chat!</p>
                 ) : (
                     dmThreads.map(user => (
-                        <div key={user.id} onClick={() => handleInboxSelect(user.id, 'dm')} className="bg-neon-card border border-gray-800 rounded-xl p-3 flex items-center space-x-3 cursor-pointer hover:border-neon-blue transition-colors">
+                        <div key={user.id} onClick={() => handleInboxSelect(user.id, 'dm')} className={`${theme.card} rounded-xl p-3 flex items-center space-x-3 cursor-pointer hover:border-neon-blue transition-colors`}>
                             <div className="relative">
                                 <img src={user.avatar} className="w-10 h-10 rounded-full object-cover" alt={user.name} />
                                 <div className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-black ${user.status === UserStatus.READY ? 'bg-neon-green' : 'bg-gray-500'}`} />
                             </div>
                             <div className="flex-1">
-                                <h4 className="font-bold text-white text-sm">{user.name}</h4>
-                                <p className="text-xs text-gray-400 truncate">Tap to chat</p>
+                                <h4 className={`font-bold ${theme.text} text-sm`}>{user.name}</h4>
+                                <p className={`text-xs ${theme.textMuted} truncate`}>Tap to chat</p>
                             </div>
                         </div>
                     ))
@@ -758,33 +821,36 @@ const App: React.FC = () => {
 
       return (
         <ChatInterface 
+            key={activeConversationId}
             title={title}
             subtitle={subtitle}
             party={partyData}
             messages={relevantMessages}
             mode={activeChatMode}
+            isDarkMode={isDarkMode}
             onSendMessage={handleSendMessage}
             onRate={handleRate}
             onInvite={handleInviteFriends}
             onHype={handleBoostHype}
             onBack={() => setActiveConversationId(null)}
+            onBookTable={activeChatMode === 'party' ? handleBookTable : undefined}
         />
       );
   };
 
   return (
-    <div className={`bg-gray-900 h-screen w-screen overflow-hidden flex flex-col ${sosTriggered ? 'animate-pulse bg-red-900' : ''}`}>
+    <div className={`${theme.bg} h-screen w-screen overflow-hidden flex flex-col ${sosTriggered ? 'animate-pulse bg-red-900' : ''} transition-colors duration-300`}>
       <NotificationSystem notifications={notifications} onDismiss={removeNotification} />
       <SOSButton onTrigger={handleSOSTrigger} />
 
       {/* User Interaction Modal */}
       {selectedUser && (
           <div className="fixed inset-0 z-[70] bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 animate-fadeIn" onClick={() => setSelectedUser(null)}>
-              <div className="bg-neon-card border border-white/10 w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100" onClick={e => e.stopPropagation()}>
+              <div className={`${theme.card} border-white/10 w-full max-w-sm rounded-2xl p-6 text-center shadow-2xl transform scale-100`} onClick={e => e.stopPropagation()}>
                   <div className="w-20 h-20 rounded-full border-2 border-neon-blue mx-auto mb-4 p-1">
                       <img src={selectedUser.avatar} className="w-full h-full rounded-full object-cover" />
                   </div>
-                  <h3 className="text-xl font-bold text-white mb-1">{selectedUser.name}</h3>
+                  <h3 className={`text-xl font-bold ${theme.text} mb-1`}>{selectedUser.name}</h3>
                   <p className="text-neon-blue text-sm mb-6">{selectedUser.status}</p>
                   
                   <div className="grid grid-cols-2 gap-3">
@@ -808,6 +874,22 @@ const App: React.FC = () => {
         />
       )}
 
+      {showInviteModal && (
+        <InviteModal 
+          url={inviteLinkData.url} 
+          title={inviteLinkData.title} 
+          onClose={() => setShowInviteModal(false)} 
+        />
+      )}
+
+      {showTableBookingFor && (
+        <TableBookingModal 
+           party={showTableBookingFor}
+           onClose={() => setShowTableBookingFor(null)}
+           onConfirm={handleBookTableConfirm}
+        />
+      )}
+
       {/* Main Content Area */}
       <div className="flex-1 relative overflow-y-auto scrollbar-hide">
         {activeTab === 'radar' && renderRadar()}
@@ -818,12 +900,12 @@ const App: React.FC = () => {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="h-20 bg-black/90 backdrop-blur-lg border-t border-white/10 flex justify-around items-center px-2 z-50 fixed bottom-0 w-full">
-        <button onClick={() => setActiveTab('radar')} className={`flex flex-col items-center p-2 ${activeTab === 'radar' ? 'text-neon-purple' : 'text-gray-500'}`}>
+      <div className={`h-20 ${theme.nav} backdrop-blur-lg border-t flex justify-around items-center px-2 z-50 fixed bottom-0 w-full transition-colors duration-300`}>
+        <button onClick={() => setActiveTab('radar')} className={`flex flex-col items-center p-2 ${activeTab === 'radar' ? 'text-neon-purple' : theme.tabInactive}`}>
           <Radar size={24} className={activeTab === 'radar' ? 'drop-shadow-[0_0_5px_#b026ff]' : ''} />
           <span className="text-[10px] mt-1">Radar</span>
         </button>
-        <button onClick={() => setActiveTab('discover')} className={`flex flex-col items-center p-2 ${activeTab === 'discover' ? 'text-neon-blue' : 'text-gray-500'}`}>
+        <button onClick={() => setActiveTab('discover')} className={`flex flex-col items-center p-2 ${activeTab === 'discover' ? 'text-neon-blue' : theme.tabInactive}`}>
           <Compass size={24} className={activeTab === 'discover' ? 'drop-shadow-[0_0_5px_#04d9ff]' : ''} />
           <span className="text-[10px] mt-1">Discover</span>
         </button>
@@ -832,11 +914,11 @@ const App: React.FC = () => {
             <PlusCircle size={32} className="text-white" />
           </div>
         </button>
-        <button onClick={() => setActiveTab('chat')} className={`flex flex-col items-center p-2 ${activeTab === 'chat' ? 'text-neon-green' : 'text-gray-500'}`}>
+        <button onClick={() => setActiveTab('chat')} className={`flex flex-col items-center p-2 ${activeTab === 'chat' ? 'text-neon-green' : theme.tabInactive}`}>
           <MessageCircle size={24} className={activeTab === 'chat' ? 'drop-shadow-[0_0_5px_#39ff14]' : ''} />
           <span className="text-[10px] mt-1">{activeConversationId ? 'Chat' : 'Inbox'}</span>
         </button>
-        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center p-2 ${activeTab === 'profile' ? 'text-white' : 'text-gray-500'}`}>
+        <button onClick={() => setActiveTab('profile')} className={`flex flex-col items-center p-2 ${activeTab === 'profile' ? (isDarkMode ? 'text-white' : 'text-gray-900') : theme.tabInactive}`}>
           <UserIcon size={24} />
           <span className="text-[10px] mt-1">You</span>
         </button>

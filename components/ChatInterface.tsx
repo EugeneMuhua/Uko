@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Users, Shield, Zap, Share2, Car, Flame, ShieldCheck, ChevronLeft } from 'lucide-react';
+import { Send, Users, Shield, Zap, Share2, Car, Flame, ShieldCheck, ChevronLeft, Wine, ArrowDown } from 'lucide-react';
 import { Message, Party, ChatMode } from '../types';
 import { MusicPlayer } from './MusicPlayer';
 
@@ -10,27 +10,77 @@ interface ChatInterfaceProps {
   party?: Party; // Optional now, only for Party Mode
   messages: Message[];
   mode: ChatMode;
+  isDarkMode?: boolean;
   onSendMessage: (text: string) => void;
   onRate: (hype: number, safety: number) => void;
   onInvite: () => void;
   onHype: () => void;
   onBack: () => void;
+  onBookTable?: () => void;
 }
 
 export const ChatInterface: React.FC<ChatInterfaceProps> = ({ 
-  title, subtitle, party, messages, mode, 
-  onSendMessage, onRate, onInvite, onHype, onBack 
+  title, subtitle, party, messages, mode, isDarkMode = true,
+  onSendMessage, onRate, onInvite, onHype, onBack, onBookTable
 }) => {
   const [inputText, setInputText] = useState('');
   const [showRating, setShowRating] = useState(false);
+  const [newMsgBanner, setNewMsgBanner] = useState<{sender: string, text: string} | null>(null);
+  
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const prevMessagesLength = useRef(messages.length);
+
+  const theme = {
+      bg: isDarkMode ? 'bg-gray-900' : 'bg-gray-50',
+      header: isDarkMode ? 'bg-neon-card border-gray-800' : 'bg-white border-gray-200',
+      text: isDarkMode ? 'text-white' : 'text-gray-900',
+      bubbleMe: 'bg-neon-purple text-white',
+      bubbleOther: isDarkMode ? 'bg-gray-800 text-gray-200' : 'bg-white text-gray-800 shadow-sm border border-gray-100',
+      inputArea: isDarkMode ? 'bg-neon-card border-gray-800' : 'bg-white border-gray-200',
+      input: isDarkMode ? 'bg-black/40 border-gray-700 text-white' : 'bg-gray-100 border-gray-300 text-gray-900',
+  };
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  // Initial scroll on mount
   useEffect(() => {
     scrollToBottom();
+  }, []);
+
+  // Monitor new messages
+  useEffect(() => {
+    const currentLength = messages.length;
+    const prevLength = prevMessagesLength.current;
+
+    if (currentLength > prevLength) {
+        const lastMsg = messages[currentLength - 1];
+        const isMe = lastMsg.senderId === 'me';
+
+        // Check scroll position
+        let isScrolledUp = false;
+        if (scrollContainerRef.current) {
+            const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+            // Tolerance of 150px
+            isScrolledUp = scrollHeight - scrollTop - clientHeight > 150;
+        }
+
+        if (isMe) {
+            scrollToBottom();
+        } else {
+            // Incoming message
+            if (isScrolledUp) {
+                // Show banner, do not scroll (interruption prevention)
+                setNewMsgBanner({ sender: lastMsg.senderName, text: lastMsg.text });
+            } else {
+                // User is at bottom, just scroll
+                scrollToBottom();
+            }
+        }
+    }
+    prevMessagesLength.current = currentLength;
   }, [messages]);
 
   const handleSend = () => {
@@ -69,8 +119,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   if (showRating && mode === 'party') {
     return (
-      <div className="h-full flex flex-col items-center justify-center p-6 bg-neon-card animate-fadeIn">
-        <h2 className="text-2xl font-bold text-white mb-2">Vibe Check! 🔥</h2>
+      <div className={`h-full flex flex-col items-center justify-center p-6 ${theme.header} animate-fadeIn`}>
+        <h2 className={`text-2xl font-bold ${theme.text} mb-2`}>Vibe Check! 🔥</h2>
         <p className="text-gray-400 mb-8 text-center">How was {title}?</p>
         
         <div className="space-y-6 w-full max-w-xs">
@@ -106,16 +156,16 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900">
+    <div className={`flex flex-col h-full ${theme.bg} relative transition-colors duration-300`}>
       {/* Header */}
-      <div className="p-4 bg-neon-card border-b border-gray-800 shadow-lg z-10">
+      <div className={`p-4 ${theme.header} border-b shadow-lg z-20 relative transition-colors`}>
         <div className="flex justify-between items-start mb-2">
           <div className="flex items-center">
             <button onClick={onBack} className="mr-3 p-1 hover:bg-white/10 rounded-full">
-                <ChevronLeft size={24} className="text-gray-300" />
+                <ChevronLeft size={24} className={isDarkMode ? "text-gray-300" : "text-gray-600"} />
             </button>
             <div>
-              <h2 className="font-bold text-white text-lg flex items-center">
+              <h2 className={`font-bold ${theme.text} text-lg flex items-center`}>
                 {title} 
                 {mode === 'party' && party && (party.hostTrustScore || 0) > 80 && <ShieldCheck size={16} className="text-neon-blue ml-2" />}
               </h2>
@@ -131,20 +181,29 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
           </div>
           
           {mode === 'party' && (
-            <div className="flex space-x-2">
+            <div className="flex space-x-1 items-center">
+                {onBookTable && (
+                  <button 
+                      onClick={onBookTable}
+                      className="bg-gradient-to-r from-neon-purple to-neon-blue text-white p-2 rounded-full shadow-[0_0_10px_rgba(176,38,255,0.4)] hover:shadow-[0_0_15px_rgba(176,38,255,0.6)] active:scale-95 transition-all mr-2"
+                      title="Book Table"
+                  >
+                      <Wine size={18} strokeWidth={2.5} />
+                  </button>
+                )}
                 <button 
                     onClick={handleGetRide}
                     className="bg-gray-800 p-2 rounded-full hover:bg-white hover:text-black transition-colors"
                     title="Get Me There (Uber)"
                 >
-                    <Car size={20} />
+                    <Car size={18} className="text-white hover:text-black" />
                 </button>
                 <button 
                     onClick={onInvite}
                     className="bg-gray-800 p-2 rounded-full hover:bg-neon-blue hover:text-white transition-colors"
                     title="Invite Squad"
                 >
-                    <Share2 size={20} className="text-gray-300" />
+                    <Share2 size={18} className="text-gray-300" />
                 </button>
             </div>
           )}
@@ -164,21 +223,37 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
       {/* Music Player - Only in Party Mode */}
       {mode === 'party' && party?.musicTrack && (
-         <div className="mt-2">
+         <div className="mt-2 relative z-10">
              <MusicPlayer track={party.musicTrack} />
          </div>
       )}
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-24">
+      <div 
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 relative"
+      >
+        {/* New Message Notification Banner */}
+        {newMsgBanner && (
+          <div className="sticky top-0 z-30 flex justify-center w-full pointer-events-none -mt-2 mb-4 animate-[slideDown_0.3s_ease-out]">
+            <button 
+              onClick={() => { scrollToBottom(); setNewMsgBanner(null); }}
+              className="pointer-events-auto bg-neon-blue/90 backdrop-blur-md text-black text-xs font-bold py-2 px-4 rounded-full shadow-[0_0_15px_rgba(4,217,255,0.4)] flex items-center space-x-2 border border-white/20 hover:bg-white transition-colors"
+            >
+              <span>New message from {newMsgBanner.sender}</span>
+              <ArrowDown size={14} className="animate-bounce" />
+            </button>
+          </div>
+        )}
+
         {messages.map((msg) => {
           const isMe = msg.senderId === 'me';
           return (
             <div key={msg.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
               <div className={`max-w-[75%] rounded-2xl p-3 text-sm ${
                 isMe 
-                  ? 'bg-neon-purple text-white rounded-tr-none' 
-                  : 'bg-gray-800 text-gray-200 rounded-tl-none'
+                  ? `${theme.bubbleMe} rounded-tr-none` 
+                  : `${theme.bubbleOther} rounded-tl-none`
               }`}>
                 {!isMe && mode === 'party' && <div className="text-[10px] text-gray-400 mb-1 font-bold">{msg.senderName}</div>}
                 {msg.text}
@@ -190,14 +265,14 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       </div>
 
       {/* Input */}
-      <div className="p-3 bg-neon-card border-t border-gray-800 flex items-center space-x-2 mb-[80px]">
+      <div className={`p-3 ${theme.inputArea} border-t flex items-center space-x-2 mb-[80px] z-20 transition-colors`}>
         <input 
           type="text" 
           value={inputText}
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSend()}
           placeholder="Send a message..."
-          className="flex-1 bg-black/40 border border-gray-700 text-white rounded-full px-4 py-3 focus:outline-none focus:border-neon-purple transition-colors"
+          className={`flex-1 ${theme.input} border rounded-full px-4 py-3 focus:outline-none focus:border-neon-purple transition-colors`}
         />
         <button 
           onClick={handleSend}
