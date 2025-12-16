@@ -43,6 +43,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setNewMsgBanner(null);
   };
 
   // Initial scroll on mount
@@ -63,8 +64,8 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         let isScrolledUp = false;
         if (scrollContainerRef.current) {
             const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
-            // Tolerance of 150px
-            isScrolledUp = scrollHeight - scrollTop - clientHeight > 150;
+            // Tolerance of 100px to detect if user is looking at history
+            isScrolledUp = scrollHeight - scrollTop - clientHeight > 100;
         }
 
         if (isMe) {
@@ -72,7 +73,7 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
         } else {
             // Incoming message
             if (isScrolledUp) {
-                // Show banner, do not scroll (interruption prevention)
+                // Show subtle suggestion chip/banner
                 setNewMsgBanner({ sender: lastMsg.senderName, text: lastMsg.text });
             } else {
                 // User is at bottom, just scroll
@@ -82,6 +83,17 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
     }
     prevMessagesLength.current = currentLength;
   }, [messages]);
+
+  // Handle scroll to remove banner if user scrolls to bottom manually
+  const handleScroll = () => {
+      if (scrollContainerRef.current) {
+          const { scrollTop, scrollHeight, clientHeight } = scrollContainerRef.current;
+          const isAtBottom = scrollHeight - scrollTop - clientHeight < 50;
+          if (isAtBottom && newMsgBanner) {
+              setNewMsgBanner(null);
+          }
+      }
+  };
 
   const handleSend = () => {
     if (!inputText.trim()) return;
@@ -96,16 +108,10 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
      const centerLng = 36.8219;
      
      // Convert relative x/y (assumed km) to approximate Lat/Lng offsets
-     // 1 deg lat ~= 111km, 1 deg lng ~= 111km at equator
      const destLat = centerLat + (party.location.y / 111);
      const destLng = centerLng + (party.location.x / 111);
 
-     // Generate Deep Link
      const url = `uber://?action=setPickup&dropoff[latitude]=${destLat.toFixed(6)}&dropoff[longitude]=${destLng.toFixed(6)}&dropoff[nickname]=${encodeURIComponent(party.title)}`;
-     
-     console.log('Generated Ride URL:', url);
-     
-     // Attempt to open deep link
      window.open(url, '_blank');
   };
 
@@ -231,17 +237,22 @@ export const ChatInterface: React.FC<ChatInterfaceProps> = ({
       {/* Messages */}
       <div 
         ref={scrollContainerRef}
+        onScroll={handleScroll}
         className="flex-1 overflow-y-auto p-4 space-y-4 pb-24 relative"
       >
-        {/* New Message Notification Banner */}
+        {/* New Message Notification Banner / Suggestion Chip */}
         {newMsgBanner && (
           <div className="sticky top-0 z-30 flex justify-center w-full pointer-events-none -mt-2 mb-4 animate-[slideDown_0.3s_ease-out]">
             <button 
-              onClick={() => { scrollToBottom(); setNewMsgBanner(null); }}
-              className="pointer-events-auto bg-neon-blue/90 backdrop-blur-md text-black text-xs font-bold py-2 px-4 rounded-full shadow-[0_0_15px_rgba(4,217,255,0.4)] flex items-center space-x-2 border border-white/20 hover:bg-white transition-colors"
+              onClick={() => { scrollToBottom(); }}
+              className={`pointer-events-auto backdrop-blur-md px-4 py-2 rounded-full shadow-lg flex items-center space-x-2 border transition-all active:scale-95 ${
+                  isDarkMode 
+                  ? 'bg-gray-800/90 border-neon-blue/50 text-white hover:bg-gray-700' 
+                  : 'bg-white/90 border-neon-blue/50 text-gray-900 hover:bg-gray-50'
+              }`}
             >
-              <span>New message from {newMsgBanner.sender}</span>
-              <ArrowDown size={14} className="animate-bounce" />
+              <span className="text-xs font-bold">New message from {newMsgBanner.sender}</span>
+              <ArrowDown size={14} className="text-neon-blue animate-bounce" />
             </button>
           </div>
         )}

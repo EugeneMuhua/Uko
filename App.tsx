@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award, ArrowRight, Wine, Sun, Moon } from 'lucide-react';
+import { Radar, Compass, PlusCircle, MessageCircle, User as UserIcon, MapPin, Loader2, Sparkles, Navigation, Music, Martini, Gamepad2, Flame, Zap, Headphones, Crosshair, Upload, X, Ghost, Award, ArrowRight, Wine, Sun, Moon, Heart } from 'lucide-react';
 import { RadarView } from './components/RadarView';
 import { ChatInterface } from './components/ChatInterface';
 import { NotificationSystem } from './components/NotificationSystem';
@@ -17,6 +17,7 @@ import { User, Party, Message, Tab, UserStatus, VibeType, AppNotification, Notif
 
 const USER_STORAGE_KEY = 'uko_user_profile';
 const THEME_STORAGE_KEY = 'uko_theme_pref';
+const SAVED_PARTIES_KEY = 'uko_saved_parties';
 
 interface UserProfile {
   name: string;
@@ -49,6 +50,12 @@ const App: React.FC = () => {
   const [isDarkMode, setIsDarkMode] = useState(() => {
     const saved = localStorage.getItem(THEME_STORAGE_KEY);
     return saved ? saved === 'dark' : true;
+  });
+
+  // --- Saved/Favorites State ---
+  const [savedPartyIds, setSavedPartyIds] = useState<string[]>(() => {
+    const saved = localStorage.getItem(SAVED_PARTIES_KEY);
+    return saved ? JSON.parse(saved) : [];
   });
 
   // --- New Feature State ---
@@ -105,6 +112,10 @@ const App: React.FC = () => {
     document.body.style.backgroundColor = isDarkMode ? '#0f0f13' : '#f9fafb';
     localStorage.setItem(THEME_STORAGE_KEY, isDarkMode ? 'dark' : 'light');
   }, [isDarkMode]);
+
+  useEffect(() => {
+    localStorage.setItem(SAVED_PARTIES_KEY, JSON.stringify(savedPartyIds));
+  }, [savedPartyIds]);
 
   useEffect(() => {
     const savedUser = localStorage.getItem(USER_STORAGE_KEY);
@@ -227,8 +238,27 @@ const App: React.FC = () => {
         }));
     }, 8000);
 
-    return () => { clearTimeout(statusTimer); clearTimeout(partyTimer); clearInterval(ghostTimer); };
-  }, [userProfile]);
+    // Simulate Chat Activity in 'p2' (Neon Basement Rave)
+    const chatInterval = setInterval(() => {
+        if (activePartyId === 'p2' && activeConversationId === 'p2') {
+             const randomMsgs = ["Lit! 🔥", "Where's the drinks?", "DJ is killing it!", "Wait for me!"];
+             const randomUser = users[Math.floor(Math.random() * users.length)];
+             const msgText = randomMsgs[Math.floor(Math.random() * randomMsgs.length)];
+             
+             const newMessage: Message = {
+                id: `m-sim-${Date.now()}`,
+                conversationId: 'p2',
+                senderId: randomUser.id,
+                senderName: randomUser.name,
+                text: msgText,
+                timestamp: new Date()
+             };
+             setMessages(prev => [...prev, newMessage]);
+        }
+    }, 12000);
+
+    return () => { clearTimeout(statusTimer); clearTimeout(partyTimer); clearInterval(ghostTimer); clearInterval(chatInterval); };
+  }, [userProfile, activePartyId, activeConversationId]);
 
   // --- Safe Check Logic (Module 1) ---
   useEffect(() => {
@@ -430,6 +460,19 @@ const App: React.FC = () => {
       setActiveChatMode(mode);
   };
 
+  const toggleFavorite = (partyId: string, e?: React.MouseEvent) => {
+      e?.stopPropagation();
+      setSavedPartyIds(prev => {
+          const isSaved = prev.includes(partyId);
+          if (isSaved) {
+              return prev.filter(id => id !== partyId);
+          } else {
+              addNotification('Event Saved', 'Added to your favorites list.', 'success');
+              return [...prev, partyId];
+          }
+      });
+  };
+
   // --- Render Views ---
 
   if (!userProfile) {
@@ -458,9 +501,20 @@ const App: React.FC = () => {
       {parties.sort((a,b) => a.distance - b.distance).map(party => (
         <div key={party.id} className={`${theme.card} rounded-xl overflow-hidden border relative transition-colors`}>
           <div className="h-32 bg-cover bg-center relative" style={{ backgroundImage: `url(${party.coverImage})` }}>
-            <div className="absolute top-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs text-white font-bold">
+            {/* Heart Button */}
+            <button 
+                onClick={(e) => toggleFavorite(party.id, e)}
+                className="absolute top-2 right-2 p-2 bg-black/40 backdrop-blur rounded-full text-white hover:bg-white hover:text-red-500 transition-all z-10 active:scale-95"
+            >
+                <Heart size={18} fill={savedPartyIds.includes(party.id) ? "currentColor" : "none"} className={savedPartyIds.includes(party.id) ? "text-red-500" : ""} />
+            </button>
+
+            {/* Distance - Moved to bottom right to make way for Heart */}
+            <div className="absolute bottom-2 right-2 bg-black/60 backdrop-blur px-2 py-1 rounded text-xs text-white font-bold">
               {party.distance}km away
             </div>
+
+            {/* Entry Fee */}
             {party.entryFee && party.entryFee > 0 && (
                  <div className="absolute top-2 left-2 bg-green-600 px-2 py-1 rounded text-xs text-white font-bold shadow-lg flex items-center">
                     <span className="mr-1 text-[10px]">KES</span> {party.entryFee}
@@ -667,84 +721,130 @@ const App: React.FC = () => {
     </div>
   );
 
-  const renderProfile = () => (
-    <div className={`p-6 ${theme.bg} min-h-screen flex flex-col items-center pt-12 ${theme.text} transition-colors duration-300`}>
-      <div className="w-24 h-24 rounded-full border-4 border-neon-purple p-1 mb-4 shadow-[0_0_20px_#b026ff]">
-        <img src={userProfile.avatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
-      </div>
-      <h2 className="text-2xl font-bold">{userProfile.name}</h2>
-      <p className="text-neon-green text-sm mb-4">{myStatus}</p>
+  const renderProfile = () => {
+    // Filter Saved Parties
+    const savedParties = parties.filter(p => savedPartyIds.includes(p.id));
 
-      {/* Badges */}
-      <div className="flex space-x-2 mb-8">
-         {['Night Owl', 'Verified', 'Safe Host'].map(b => (
-            <span key={b} className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-sm'} text-xs px-2 py-1 rounded-full border flex items-center ${theme.textMuted}`}>
-                <Award size={10} className="mr-1 text-yellow-500" /> {b}
-            </span>
-         ))}
-      </div>
+    return (
+        <div className={`p-6 ${theme.bg} min-h-screen flex flex-col items-center pt-12 ${theme.text} transition-colors duration-300 pb-24`}>
+        <div className="w-24 h-24 rounded-full border-4 border-neon-purple p-1 mb-4 shadow-[0_0_20px_#b026ff]">
+            <img src={userProfile.avatar} alt="Profile" className="w-full h-full rounded-full object-cover" />
+        </div>
+        <h2 className="text-2xl font-bold">{userProfile.name}</h2>
+        <p className="text-neon-green text-sm mb-4">{myStatus}</p>
 
-      <div className="w-full space-y-4">
-        {/* Toggle Theme */}
-        <button 
-            onClick={() => setIsDarkMode(!isDarkMode)}
-            className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
-                isDarkMode 
-                ? 'bg-neon-card border-gray-700 hover:bg-gray-800' 
-                : 'bg-white border-gray-200 hover:bg-gray-50'
-            }`}
-        >
-            <span className="flex items-center">
-                {isDarkMode ? <Moon size={18} className="mr-3" /> : <Sun size={18} className="mr-3 text-orange-500" />} 
-                Appearance
-            </span>
-            <span className={`text-xs font-bold px-2 py-1 rounded opacity-70`}>
-                {isDarkMode ? 'Dark Mode' : 'Light Mode'}
-            </span>
-        </button>
-
-        <button 
-            onClick={() => setIsGhostMode(!isGhostMode)}
-            className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
-                isGhostMode 
-                ? 'bg-neon-purple/20 border-neon-purple' 
-                : `${isDarkMode ? 'bg-neon-card border-gray-700 hover:bg-gray-800' : 'bg-white border-gray-200 hover:bg-gray-50'} ${theme.textMuted}`
-            }`}
-        >
-            <span className="flex items-center"><Ghost size={18} className="mr-3" /> Ghost Mode</span>
-            <span className={`text-xs font-bold px-2 py-1 rounded ${isGhostMode ? 'bg-neon-purple text-white' : 'bg-gray-800'}`}>
-                {isGhostMode ? 'ON' : 'OFF'}
-            </span>
-        </button>
-
-        <button 
-            onClick={handleInviteFriends}
-            className={`w-full ${theme.card} p-4 rounded-xl border flex items-center justify-between ${theme.cardHover} transition-colors`}
-        >
-            <span className="flex items-center"><Navigation size={18} className="mr-3 text-neon-blue" /> Invite Squad</span>
-            <span className={`${theme.textMuted} text-sm`}>Share Link</span>
-        </button>
-
-        <div className="grid grid-cols-2 gap-4">
-            <div className={`${theme.card} p-4 rounded-xl border`}>
-                <span className={`block ${theme.textMuted} text-xs`}>Trust Score</span>
-                <span className="font-bold text-neon-green text-xl">98%</span>
-            </div>
-            <div className={`${theme.card} p-4 rounded-xl border`}>
-                <span className={`block ${theme.textMuted} text-xs`}>Vibe Rating</span>
-                <span className="font-bold text-neon-blue text-xl">4.9 🔥</span>
-            </div>
+        {/* Badges */}
+        <div className="flex space-x-2 mb-8">
+            {['Night Owl', 'Verified', 'Safe Host'].map(b => (
+                <span key={b} className={`${isDarkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200 shadow-sm'} text-xs px-2 py-1 rounded-full border flex items-center ${theme.textMuted}`}>
+                    <Award size={10} className="mr-1 text-yellow-500" /> {b}
+                </span>
+            ))}
         </div>
 
-        <button 
-            onClick={() => { localStorage.removeItem(USER_STORAGE_KEY); setUserProfile(null); }}
-            className="w-full mt-8 py-3 text-red-500 border border-red-900/50 rounded-xl hover:bg-red-900/20 text-sm"
-        >
-            Log Out
-        </button>
-      </div>
-    </div>
-  );
+        <div className="w-full space-y-4">
+            {/* Toggle Theme */}
+            <button 
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
+                    isDarkMode 
+                    ? 'bg-neon-card border-gray-700 hover:bg-gray-800' 
+                    : 'bg-white border-gray-200 hover:bg-gray-50'
+                }`}
+            >
+                <span className="flex items-center">
+                    {isDarkMode ? <Moon size={18} className="mr-3" /> : <Sun size={18} className="mr-3 text-orange-500" />} 
+                    Appearance
+                </span>
+                <span className={`text-xs font-bold px-2 py-1 rounded opacity-70`}>
+                    {isDarkMode ? 'Dark Mode' : 'Light Mode'}
+                </span>
+            </button>
+
+            <button 
+                onClick={() => setIsGhostMode(!isGhostMode)}
+                className={`w-full p-4 rounded-xl border flex items-center justify-between transition-colors ${
+                    isGhostMode 
+                    ? 'bg-neon-purple/20 border-neon-purple' 
+                    : `${isDarkMode ? 'bg-neon-card border-gray-700 hover:bg-gray-800' : 'bg-white border-gray-200 hover:bg-gray-50'} ${theme.textMuted}`
+                }`}
+            >
+                <span className="flex items-center"><Ghost size={18} className="mr-3" /> Ghost Mode</span>
+                <span className={`text-xs font-bold px-2 py-1 rounded ${isGhostMode ? 'bg-neon-purple text-white' : 'bg-gray-800'}`}>
+                    {isGhostMode ? 'ON' : 'OFF'}
+                </span>
+            </button>
+
+            <button 
+                onClick={handleInviteFriends}
+                className={`w-full ${theme.card} p-4 rounded-xl border flex items-center justify-between ${theme.cardHover} transition-colors`}
+            >
+                <span className="flex items-center"><Navigation size={18} className="mr-3 text-neon-blue" /> Invite Squad</span>
+                <span className={`${theme.textMuted} text-sm`}>Share Link</span>
+            </button>
+
+            <div className="grid grid-cols-2 gap-4">
+                <div className={`${theme.card} p-4 rounded-xl border`}>
+                    <span className={`block ${theme.textMuted} text-xs`}>Trust Score</span>
+                    <span className="font-bold text-neon-green text-xl">98%</span>
+                </div>
+                <div className={`${theme.card} p-4 rounded-xl border`}>
+                    <span className={`block ${theme.textMuted} text-xs`}>Vibe Rating</span>
+                    <span className="font-bold text-neon-blue text-xl">4.9 🔥</span>
+                </div>
+            </div>
+
+            {/* Saved Events Section */}
+            <div className="w-full mt-4">
+                <h3 className={`font-bold ${theme.text} mb-3 flex items-center text-sm uppercase tracking-wider`}>
+                    <Heart size={14} className="mr-2 text-red-500" fill="currentColor" /> Saved Events
+                </h3>
+                {savedParties.length === 0 ? (
+                    <div className={`p-6 rounded-xl border border-dashed ${isDarkMode ? 'border-gray-800' : 'border-gray-300'} text-center`}>
+                        <p className={`${theme.textMuted} text-sm mb-2`}>No parties saved yet.</p>
+                        <button onClick={() => setActiveTab('discover')} className="text-neon-blue text-xs font-bold hover:underline">Explore Radar</button>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        {savedParties.map(p => (
+                            <div key={p.id} className={`${theme.card} p-3 rounded-xl border flex items-center space-x-3 transition-colors ${theme.cardHover}`}>
+                                <div className="w-12 h-12 rounded-lg bg-gray-800 overflow-hidden flex-shrink-0">
+                                    <img src={p.coverImage} alt={p.title} className="w-full h-full object-cover" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h4 className={`font-bold ${theme.text} text-sm truncate`}>{p.title}</h4>
+                                    <p className={`text-xs ${theme.textMuted} truncate`}>{p.startTime} • {p.distance}km away</p>
+                                </div>
+                                <div className="flex space-x-2">
+                                     <button 
+                                        onClick={() => toggleFavorite(p.id)}
+                                        className="p-2 rounded-full hover:bg-gray-700/50 text-red-500"
+                                     >
+                                        <Heart size={16} fill="currentColor" />
+                                     </button>
+                                     <button 
+                                        onClick={() => handleJoinParty(p)}
+                                        className="bg-neon-purple text-white p-2 rounded-lg text-xs font-bold shadow-[0_0_10px_#b026ff40]"
+                                     >
+                                        Join
+                                     </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <button 
+                onClick={() => { localStorage.removeItem(USER_STORAGE_KEY); setUserProfile(null); }}
+                className="w-full mt-8 py-3 text-red-500 border border-red-900/50 rounded-xl hover:bg-red-900/20 text-sm"
+            >
+                Log Out
+            </button>
+        </div>
+        </div>
+    );
+  };
 
   const renderInbox = () => {
     // Group messages by conversationId to find recent chats
